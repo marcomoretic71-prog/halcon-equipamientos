@@ -217,30 +217,88 @@ def api_buscar_productos(request):
     except Exception as e:
         return JsonResponse([], safe=False)
 
+# =========== ESTA ES LA FUNCION CORREGIDA - REEMPLAZA LA TUYA ===========
 @login_required
 @csrf_exempt
 def api_guardar_producto(request):
-    if request.method == 'POST':
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        d = json.loads(request.body)
+        prod_id = d.get('id')
+        # Si prod_id viene vacio o 0, es nuevo
+        if prod_id in ('', 0, '0', None):
+            prod_id = None
+        else:
+            try:
+                prod_id = int(prod_id)
+            except:
+                prod_id = None
+
+        p = Producto.objects.get(id=prod_id) if prod_id else Producto()
+
+        codigo = str(d.get('codigo','')).strip()
+        nombre = str(d.get('nombre','')).strip()
+        if not codigo or not nombre:
+            return JsonResponse({'ok': False, 'error': 'Falta código y nombre'})
+
+        # Validar código duplicado
+        qs_codigo = Producto.objects.filter(codigo__iexact=codigo)
+        if prod_id:
+            qs_codigo = qs_codigo.exclude(id=prod_id)
+        if qs_codigo.exists():
+            return JsonResponse({'ok': False, 'error': f'Ya existe otro producto con código {codigo}'})
+
+        # Validar barcode duplicado - FIX DEL ERROR DE LA FOTO
+        barcode_raw = d.get('barcode','')
+        barcode_val = str(barcode_raw).strip() if barcode_raw else ''
+        if not barcode_val:
+            barcode_val = None
+
+        if barcode_val:
+            qs_barcode = Producto.objects.filter(barcode=barcode_val)
+            if prod_id:
+                qs_barcode = qs_barcode.exclude(id=prod_id)
+            if qs_barcode.exists():
+                return JsonResponse({'ok': False, 'error': f'El código de barras {barcode_val} ya existe en otro producto'})
+
+        p.codigo = codigo
+        p.barcode = barcode_val
+        p.nombre = nombre
+        p.categoria = str(d.get('categoria','OTRO')).strip() or 'OTRO'
+        
         try:
-            d = json.loads(request.body)
-            prod_id = d.get('id')
-            p = Producto.objects.get(id=prod_id) if prod_id else Producto()
-            p.codigo = d['codigo'].strip()
-            p.barcode = d.get('barcode','').strip() or None
-            p.nombre = d['nombre'].strip()
-            p.categoria = d.get('categoria','OTRO')
-            p.precio = float(d.get('precio',0))
-            p.stock = int(d.get('stock',0))
-            fields = [f.name for f in Producto._meta.get_fields() if hasattr(f, 'name')]
-            if 'compatibilidad' in fields:
-                p.compatibilidad = d.get('compat','') or d.get('compatibilidad','')
-            if 'compat' in fields:
-                p.compat = d.get('compat','') or d.get('compatibilidad','')
-            p.save()
-            return JsonResponse({'ok': True, 'id': p.id})
-        except Exception as e:
-            return JsonResponse({'ok': False, 'error': str(e)})
-    return JsonResponse({'ok': False})
+            p.precio = float(str(d.get('precio',0)).replace(',','.'))
+        except:
+            p.precio = 0
+        try:
+            p.stock = int(float(str(d.get('stock',0)).replace(',','.')))
+        except:
+            p.stock = 0
+
+        fields = [f.name for f in Producto._meta.get_fields() if hasattr(f, 'name')]
+        if 'compatibilidad' in fields:
+            try:
+                p.compatibilidad = d.get('compat','') or d.get('compatibilidad','') or nombre
+            except:
+                pass
+        if 'compat' in fields:
+            try:
+                from django.db.models import CharField, TextField
+                f = Producto._meta.get_field('compat')
+                if isinstance(f, (CharField, TextField)):
+                    p.compat = d.get('compat','') or d.get('compatibilidad','') or ''
+            except:
+                pass
+
+        p.save()
+        return JsonResponse({'ok': True, 'id': p.id})
+    except Producto.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Producto no encontrado'})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})
 
 @login_required
 @csrf_exempt
