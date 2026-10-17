@@ -16,11 +16,8 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
 <body>
 <nav class="sticky top-0 z-50 bg-[#161616] border-b border-[#222] px-4 py-3 flex items-center justify-between">
   <div class="flex items-center gap-3">
-    <!-- LOGO EXACTO DE INICIO - 62px + BORDE NARANJA + 20px/13px -->
     <img src="/static/logo_halcon_circular.png" style="width:62px;height:62px;border-radius:50%;border:2px solid #ff8c00;object-fit:cover">
     <div style="line-height:1"><b style="font-size:20px;letter-spacing:1px;color:#e0e0e0">HALCÓN</b><br><span style="font-size:13px;color:#ff8c00;font-weight:700;letter-spacing:1px">EQUIPAMIENTOS</span></div>
-    
-    <!-- NAVBAR UNIFICADA - TODOS LOS BOTONES SIEMPRE VISIBLES -->
     <div class="flex bg-[#1a1a1a] rounded-full p-1 gap-1 items-center ml-6 overflow-x-auto max-w-[75vw] scrollbar-none">
       <a href="/" class="px-4 py-2 rounded-full text-sm text-zinc-400 hover:text-white whitespace-nowrap">🏠 Inicio</a>
       <a href="/productos/" class="px-4 py-2 rounded-full text-sm text-zinc-400 hover:text-white whitespace-nowrap">📦 Productos</a>
@@ -39,7 +36,6 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
   <div class="flex flex-col md:flex-row justify-between gap-4 mb-6">
     <div class="flex items-center gap-3">
       <h1 class="text-[22px] font-extrabold tracking-tight">Listas de Precios</h1>
-      <!-- BOTONES NUEVOS - NO TOCAN LO QUE YA TENES -->
       <button onclick="abrirImportModal()" class="bg-[#facc15] text-black font-bold px-5 py-2 rounded-full text-sm hover:bg-yellow-300">📥 Importar Excel</button>
       <button onclick="crearListaNueva()" class="bg-[#1e1e1e] border border-[#2a2a2a] text-white font-bold px-4 py-2 rounded-full text-sm hover:bg-[#2a2a2a]">＋ Nueva Lista</button>
     </div>
@@ -63,28 +59,34 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
         <div class="flex items-center gap-2 text-[11px] text-zinc-500"><span>PRECIO</span><span id="arrow-{{ lista.id }}">▼</span></div>
       </button>
       <div id="body-{{ lista.id }}" class="hidden border-t border-[#262626]">
-        <div class="bg-[#1a1a1a] p-3 flex items-center gap-2 border-b border-[#262626]">
+        <div class="bg-[#1a1a1a] p-3 flex items-center gap-2 border-b border-[#262626] flex-wrap">
           <span class="text-[11px] text-zinc-400">Aumento por lista:</span>
           <input id="pct-{{ lista.id }}" type="number" placeholder="%" class="bg-[#0f0f0f] border border-[#333] rounded-full px-3 py-1.5 w-20 text-sm text-center outline-none">
           <span class="text-sm">%</span>
           <button onclick="aplicarPorcentaje('{{ lista.id }}')" class="bg-[#facc15] text-black font-bold px-4 py-1.5 rounded-full text-xs hover:bg-yellow-300">Aplicar suba</button>
           <button onclick="exportarLista('{{ lista.id }}')" class="bg-[#222] border border-[#333] text-zinc-300 px-3 py-1.5 rounded-full text-xs ml-2">⬇ Exportar</button>
+          <button onclick="limpiarDuplicadosLista('{{ lista.id }}')" class="bg-red-500/10 border border-red-500/20 text-red-400 px-3 py-1.5 rounded-full text-xs ml-2 hover:bg-red-500 hover:text-white">🧹 Quitar duplicados</button>
           <span id="status-{{ lista.id }}" class="text-[11px] text-zinc-500 ml-2"></span>
         </div>
         <div class="max-h-[520px] overflow-auto">
           <table class="w-full text-[11px]">
             <thead class="sticky top-0 bg-[#1e1e1e] text-[9px] text-zinc-500 uppercase">
-              <tr><th class="text-left p-2">Código</th><th class="text-left p-2">Producto</th><th class="text-right p-2">Precio</th><th class="p-2"></th></tr>
+              <tr><th class="text-left p-2">Código</th><th class="text-left p-2">Producto</th><th class="text-right p-2">Precio</th><th class="p-2 text-right">Acción</th></tr>
             </thead>
             <tbody class="divide-y divide-[#1e1e1e]">
             {% for item in lista.items.all %}
-              <tr class="hover:bg-[#1e1e1e]/50 prod-row" data-codigo="{{ item.producto.codigo|lower }}" data-nombre="{{ item.producto.nombre|lower }}">
+              <tr id="row-{{ item.id }}" class="hover:bg-[#1e1e1e]/50 prod-row" data-codigo="{{ item.producto.codigo|lower }}" data-nombre="{{ item.producto.nombre|lower }}">
                 <td class="p-2.5 text-zinc-500 font-mono text-[10px]">{{ item.producto.codigo }}</td>
                 <td class="p-2.5 text-zinc-300 max-w-[220px] truncate">{{ item.producto.nombre }}</td>
                 <td class="p-2.5 text-right">
-                  <input id="price-{{ item.id }}" data-item="{{ item.id }}" data-lista="{{ lista.id }}" type="text" value="{{ item.producto.precio|ars }}" class="price-input bg-[#0f0f0f] border border-[#333] rounded-lg px-2 py-1.5 w-[125px] text-right outline-none focus:border-yellow-400">
+                  <input id="price-{{ item.id }}" data-item="{{ item.id }}" data-lista="{{ lista.id }}" type="text" value="{{ item.producto.precio|ars|default:item.precio }}" class="price-input bg-[#0f0f0f] border border-[#333] rounded-lg px-2 py-1.5 w-[125px] text-right outline-none focus:border-yellow-400">
                 </td>
-                <td class="p-2.5 text-right"><button onclick="guardar('{{ item.id }}')" class="w-6 h-6 rounded-full bg-[#facc15] text-black font-bold">›</button></td>
+                <td class="p-2.5 text-right">
+                  <div class="flex gap-1 justify-end items-center">
+                    <button onclick="guardar('{{ item.id }}')" class="w-6 h-6 rounded-full bg-[#facc15] text-black font-bold hover:bg-yellow-300" title="Guardar precio">›</button>
+                    <button onclick="eliminarDeLista('{{ item.id }}', '{{ item.producto.codigo|escapejs }}')" class="w-6 h-6 rounded-full bg-[#222] border border-[#333] text-red-400 hover:bg-red-500 hover:text-white text-[12px] font-bold" title="Eliminar de la lista">✕</button>
+                  </div>
+                </td>
               </tr>
             {% endfor %}
             </tbody>
@@ -95,17 +97,11 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
   {% endfor %}
   </div>
 </div>
-<!-- MODAL IMPORTAR EXCEL BRACCO - NO TOCA NADA DE LO ANTERIOR -->
 <div id="modalImport" class="fixed inset-0 z-[100] hidden bg-black/70 backdrop-blur flex items-center justify-center p-4">
   <div class="bg-[#151515] border border-[#262626] rounded-[20px] w-full max-w-[650px] p-6">
     <div class="flex justify-between items-center mb-4">
       <h3 class="font-black text-[18px]">📥 Importar Lista BRACCO / Excel</h3>
       <button onclick="cerrarImportModal()" class="w-8 h-8 rounded-full bg-[#222]">✕</button>
-    </div>
-    <div class="bg-[#1a1a1a] rounded-[12px] p-4 mb-4 text-[11px] text-zinc-400 leading-relaxed">
-      <b class="text-white">Formato BRACCO:</b> <span class="text-[#facc15]">CODIGO; DESCRIPCION; PRECIO</span> (107172,75)<br>
-      También acepta <b class="text-white">.xlsx</b> con A=CODIGO | B=NOMBRE | C=PRECIO<br>
-      <span class="text-zinc-500">Este precio es el maestro y afecta Presupuestos, Ventas y Caja.</span>
     </div>
     <label class="block mb-2 text-[12px] text-zinc-400">Nombre de la lista (a tu gusto)</label>
     <input id="nombreListaInput" type="text" placeholder="Ej: BRACCO - BASE - OCTUBRE 2025" class="w-full bg-[#0f0f0f] border border-[#333] rounded-full px-4 py-2.5 text-sm mb-4 outline-none focus:border-yellow-400">
@@ -202,14 +198,14 @@ function confirmarImport(){
   if(datosImport.length===0){ alert('No hay datos'); return; }
   let listaId = document.getElementById('listaDestino').value;
   let nombreNuevo = document.getElementById('nombreListaInput').value.trim();
-  if(listaId==='nueva' && !nombreNuevo){ alert('Escribí el nombre de la lista, ej: BRACCO - BASE - OCTUBRE'); return; }
+  if(listaId==='nueva' && !nombreNuevo){ alert('Escribí el nombre de la lista'); return; }
   let btn = document.getElementById('btnConfirmar'); btn.textContent='Importando...'; btn.disabled=true;
   fetch('/api/importar_lista_excel/',{
     method:'POST',
     headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'},
     body:JSON.stringify({lista_id: listaId, nombre_nueva: nombreNuevo, items: datosImport})
   }).then(r=>r.json()).then(d=>{
-    if(d.ok){ alert(`✅ ${d.creados} creados, ${d.actualizados} actualizados en ${d.lista_nombre} - Total ${d.total_lista} productos`); location.reload(); }
+    if(d.ok){ alert(`✅ ${d.creados} creados, ${d.actualizados} actualizados`); location.reload(); }
     else alert('Error: '+d.error);
   }).catch(e=>alert('Error de red: '+e)).finally(()=>{btn.textContent='✅ Confirmar e Importar'; btn.disabled=false;});
 }
@@ -231,14 +227,14 @@ function guardar(id){
   const val=parseARS(inp.value);
   if(val<=0){ alert('Precio inválido'); return; }
   inp.style.borderColor='#facc15';
-  fetch('/editar_precio_item_lista/',{ method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'}, body:JSON.stringify({item_id:id, precio:val}) }).then(r=>r.json()).then(d=>{ if(d.ok){ inp.value=formatARS(d.nuevo_precio); inp.style.borderColor='#22c55e'; setTimeout(()=>inp.style.borderColor='#333',1000); } }).catch(()=>{ inp.value=formatARS(val); inp.style.borderColor='#22c55e'; });
+  fetch('/editar_precio_item_lista/',{ method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'}, body:JSON.stringify({item_id:id, precio:val}) }).then(r=>r.json()).then(d=>{ if(d.ok){ inp.value=formatARS(d.nuevo_precio); inp.style.borderColor='#22c55e'; setTimeout(()=>inp.style.borderColor='#333',1000); } });
 }
 async function aplicarPorcentaje(listaId){
   const pctInput=document.getElementById('pct-'+listaId);
   const status=document.getElementById('status-'+listaId);
   let pct=parseFloat(pctInput.value);
   if(!pct || pct===0){ alert('Pone un %'); return; }
-  if(!confirm(`¿Aplicar ${pct}% de aumento a toda la lista ${listaId}?`)) return;
+  if(!confirm(`¿Aplicar ${pct}% de aumento a toda la lista?`)) return;
   status.textContent='Aplicando...';
   const inputs=document.querySelectorAll(`.price-input[data-lista="${listaId}"]`);
   let count=0;
@@ -249,10 +245,39 @@ async function aplicarPorcentaje(listaId){
     try{ await fetch('/editar_precio_item_lista/',{ method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'}, body:JSON.stringify({item_id:inp.dataset.item, precio:nuevo}) }); count++; status.textContent=`${count}/${inputs.length} actualizados`; }catch(e){}
     await new Promise(r=>setTimeout(r,80));
   }
-  status.textContent=`Listo - ${count} productos actualizados ${pct}%`;
-  setTimeout(()=>status.textContent='',3000);
+  status.textContent=`Listo - ${count} actualizados ${pct}%`;
 }
 function exportarLista(id){ window.location='/api/exportar_lista_excel/?lista_id='+id; }
+async function eliminarDeLista(item_id, codigo){
+  if(!confirm(`¿Eliminar ${codigo} de esta lista?\nNo borra el producto del sistema.`)) return;
+  const row = document.getElementById('row-'+item_id);
+  if(row) row.style.opacity = '0.3';
+  try{
+    let res = await fetch('/api/eliminar_item_lista/', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'},
+      body: JSON.stringify({item_id: item_id})
+    });
+    let data = await res.json();
+    if(data.ok){ if(row) row.remove(); }
+    else { alert('Error: '+(data.error||'')); if(row) row.style.opacity='1'; }
+  }catch(e){ alert('Error: '+e.message); if(row) row.style.opacity='1'; }
+}
+async function limpiarDuplicadosLista(listaId){
+  if(!confirm('¿Limpiar duplicados? Deja solo el más nuevo por código.')) return;
+  const status=document.getElementById('status-'+listaId);
+  status.textContent='Limpiando...';
+  try{
+    let res = await fetch('/api/limpiar_duplicados_lista/', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'},
+      body: JSON.stringify({lista_id: listaId})
+    });
+    let data = await res.json();
+    if(data.ok){ alert(`✅ Eliminados ${data.eliminados} duplicados`); location.reload(); }
+    else { alert('Error: '+data.error); status.textContent=''; }
+  }catch(e){ alert('Error: '+e.message); status.textContent=''; }
+}
 document.getElementById('buscador').addEventListener('input', e=>{
   let q=e.target.value.toLowerCase();
   document.querySelectorAll('.prod-row').forEach(row=>{
