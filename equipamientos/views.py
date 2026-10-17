@@ -213,7 +213,6 @@ def api_buscar_productos(request):
             })
         return JsonResponse(data, safe=False)
     except Exception as e:
-        print(f"ERROR api_buscar_productos q={q}: {e}")
         return JsonResponse([], safe=False)
 
 @csrf_exempt
@@ -502,9 +501,6 @@ def pdf_presupuesto(request, codigo):
     p.save()
     return response
 
-from django.db import transaction
-import re
-
 @csrf_exempt
 def api_crear_lista(request):
     if request.method == 'POST':
@@ -525,4 +521,83 @@ def _limpiar_precio_br(valor):
     if valor is None:
         return 0
     s = str(valor).strip()
-    if not s
+    if not s:
+        return 0
+    s = s.replace("R$", "").replace("$", "").strip()
+    # Brasil usa . como miles y , como decimal
+    if "," in s and "." in s:
+        s = s.replace(".", "").replace(",", ".")
+    elif "," in s:
+        s = s.replace(",", ".")
+    try:
+        return float(s)
+    except:
+        return 0
+
+@csrf_exempt
+def api_importar_lista_excel(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        import openpyxl
+        lista_id = request.POST.get('lista_id')
+        archivo = request.FILES.get('archivo')
+        if not lista_id or not archivo:
+            return JsonResponse({'ok': False, 'error': 'Falta lista o archivo'})
+        lista = ListaPrecio.objects.get(id=lista_id)
+        wb = openpyxl.load_workbook(archivo)
+        ws = wb.active
+        count = 0
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if not row or not row[0]:
+                continue
+            codigo = str(row[0]).strip()
+            nombre = str(row[1]).strip() if len(row) > 1 and row[1] else codigo
+            precio = _limpiar_precio_br(row[2]) if len(row) > 2 else 0
+            if precio <= 0:
+                continue
+            prod, _ = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': 'OTRO'})
+            prod.nombre = nombre
+            prod.precio = precio
+            prod.save()
+            ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
+            count += 1
+        return JsonResponse({'ok': True, 'importados': count})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+@csrf_exempt
+def api_exportar_lista_excel(request):
+    try:
+        import openpyxl
+        from io import BytesIO
+        lista_id = request.GET.get('lista_id')
+        lista = ListaPrecio.objects.get(id=lista_id)
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = lista.nombre[:30]
+        ws.append(["CODIGO", "NOMBRE", "PRECIO"])
+        for item in lista.items.select_related('producto').all():
+            ws.append([item.producto.codigo, item.producto.nombre, float(item.precio)])
+        bio = BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+        response = HttpResponse(bio.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="{lista.nombre}.xlsx"'
+        return response
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+@csrf_exempt
+def api_cambiar_password(request):
+    if request.method == 'POST':
+        try:
+            d = json.loads(request.body)
+            from django.contrib.auth.models import User
+            user = User.objects.get(username='cliente')
+            user.set_password(d.get('nueva', 'halcon123'))
+            user.save()
+            return JsonResponse({'ok': True})
+        except Exception as e:
+            return JsonResponse({'ok': False, 'error': str(e)})
+    return JsonResponse({'ok': False})
