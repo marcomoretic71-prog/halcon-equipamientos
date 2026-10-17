@@ -1,4 +1,3 @@
-{% load formato %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -79,7 +78,7 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
                 <td class="p-2.5 text-zinc-500 font-mono text-[10px]">{{ item.producto.codigo }}</td>
                 <td class="p-2.5 text-zinc-300 max-w-[220px] truncate">{{ item.producto.nombre }}</td>
                 <td class="p-2.5 text-right">
-                  <input id="price-{{ item.id }}" data-item="{{ item.id }}" data-lista="{{ lista.id }}" type="text" value="{{ item.producto.precio|ars|default:item.precio }}" class="price-input bg-[#0f0f0f] border border-[#333] rounded-lg px-2 py-1.5 w-[125px] text-right outline-none focus:border-yellow-400">
+                  <input id="price-{{ item.id }}" data-item="{{ item.id }}" data-lista="{{ lista.id }}" type="text" value="{{ item.producto.precio }}" class="price-input bg-[#0f0f0f] border border-[#333] rounded-lg px-2 py-1.5 w-[125px] text-right outline-none focus:border-yellow-400">
                 </td>
                 <td class="p-2.5 text-right">
                   <div class="flex gap-1 justify-end items-center">
