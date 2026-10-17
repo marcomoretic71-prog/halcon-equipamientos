@@ -190,7 +190,7 @@ def api_buscar_productos(request):
             if 'compat' in field_names:
                 query |= Q(compat__icontains=q)
             productos = productos.filter(query)
-        productos = productos.order_by('codigo')[:100]
+        productos = productos.order_by('codigo')[:2000]
         data = []
         for p in productos:
             compat_val = ""
