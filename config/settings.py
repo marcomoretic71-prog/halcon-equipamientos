@@ -6,7 +6,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'halcon-dev-key')
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+
+# Para Railway
 ALLOWED_HOSTS = ['*']
+
+# ESTO ES LO QUE TE FALTABA - arregla el 403
+csrf_origins = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+if csrf_origins:
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in csrf_origins.split(',') if o.strip()]
+else:
+    CSRF_TRUSTED_ORIGINS = [
+        'https://halcon-equipamientos-production.up.railway.app',
+        'https://*.up.railway.app',
+    ]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -46,7 +58,8 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600
+        conn_max_age=600,
+        ssl_require=False
     )
 }
 
