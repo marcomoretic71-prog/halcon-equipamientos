@@ -1,11 +1,11 @@
-   [phases.setup]
-   nixPkgs = ["python3", "postgresql"]
+[phases.setup]
+nixPkgs = ["python3", "postgresql"]
 
-   [phases.install]
-   cmds = ["pip install -r requirements.txt"]
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
 
-   [phases.build]
-   cmds = ["python manage.py collectstatic --noinput"]
+[phases.build]
+cmds = ["mkdir -p staticfiles", "python manage.py collectstatic --noinput --clear"]
 
-   [start]
-   cmd = "gunicorn config.wsgi --bind 0.0.0.0:$PORT"
+[start]
+cmd = "python manage.py collectstatic --noinput && gunicorn config.wsgi --bind 0.0.0.0:$PORT"
