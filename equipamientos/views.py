@@ -690,3 +690,95 @@ def api_eliminar_item_lista(request):
         except Exception as e:
             return JsonResponse({'ok': False, 'error': str(e)})
     return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+
+    # === PEGAR ESTO AL FINAL DE TU views.py ===
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required
+import json
+from .models import ListaPrecio, ItemListaPrecio, Producto
+
+@login_required
+@csrf_exempt
+def api_eliminar_item_lista(request):
+    if request.method == 'POST':
+        try:
+            d = json.loads(request.body)
+            item_id = d.get('item_id')
+            if not item_id:
+                return JsonResponse({'ok': False, 'error': 'Falta item_id'})
+            ItemListaPrecio.objects.filter(id=item_id).delete()
+            return JsonResponse({'ok': True})
+        except Exception as e:
+            return JsonResponse({'ok': False, 'error': str(e)})
+    return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+
+@login_required
+@csrf_exempt
+def api_limpiar_duplicados_lista(request):
+    if request.method == 'POST':
+        try:
+            d = json.loads(request.body)
+            lista_id = d.get('lista_id')
+            lista = ListaPrecio.objects.get(id=lista_id)
+            vistos = {}
+            eliminados = 0
+            for item in lista.items.select_related('producto').order_by('-id'):
+                codigo = item.producto.codigo.strip().upper()
+                if codigo in vistos:
+                    item.delete()
+                    eliminados += 1
+                else:
+                    vistos[codigo] = True
+            return JsonResponse({'ok': True, 'eliminados': eliminados, 'quedan': len(vistos)})
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            return JsonResponse({'ok': False, 'error': str(e)})
+    return JsonResponse({'ok': False})
+
+@login_required
+@csrf_exempt
+def api_importar_lista_excel(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        # MODO JSON (nuevo modal)
+        if request.content_type == 'application/json':
+            data = json.loads(request.body)
+            items = data.get('items', [])
+            lista_id = data.get('lista_id')
+            nombre_nueva = data.get('nombre_nueva','').strip()
+            if lista_id == 'nueva':
+                if not nombre_nueva:
+                    return JsonResponse({'ok': False, 'error': 'Falta nombre de lista'})
+                lista, _ = ListaPrecio.objects.get_or_create(nombre__iexact=nombre_nueva, defaults={'nombre': nombre_nueva})
+                if lista.nombre != nombre_nueva:
+                    lista.nombre = nombre_nueva
+                    lista.save()
+            else:
+                lista = ListaPrecio.objects.get(id=lista_id)
+            creados = 0
+            actualizados = 0
+            for row in items:
+                codigo = str(row.get('codigo','')).strip().upper()
+                nombre = str(row.get('nombre','')).strip() or codigo
+                try:
+                    precio = float(row.get('precio',0) or 0)
+                except:
+                    precio = 0
+                if not codigo or precio <= 0:
+                    continue
+                prod, created = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': 'OTRO'})
+                if created:
+                    creados += 1
+                else:
+                    prod.nombre = nombre
+                    prod.precio = precio
+                    prod.save()
+                    actualizados += 1
+                ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
+            return JsonResponse({'ok': True, 'lista_nombre': lista.nombre, 'creados': creados, 'actualizados': actualizados, 'total_lista': lista.items.count()})
+        return JsonResponse({'ok': False, 'error': 'Formato no soportado'})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})

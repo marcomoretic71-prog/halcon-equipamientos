@@ -41,6 +41,8 @@ urlpatterns = [
     path('api/super/bloqueo-global/', views_super.api_bloqueo_global, name='api_bloqueo_global'),
     path('api/cambiar-password/', views.api_cambiar_password, name='cambiar_password'),
 
+
     path('api/eliminar_item_lista/', views.api_eliminar_item_lista, name='api_eliminar_item_lista'),
-    path('api/limpiar_duplicados_lista/', views.api_limpiar_duplicados_lista, name='api_limpiar_duplicados_lista'),     
+    path('api/limpiar_duplicados_lista/', views.api_limpiar_duplicados_lista, name='api_limpiar_duplicados_lista'),
+    path('api/importar_lista_excel/', views.api_importar_lista_excel, name='api_importar_lista_excel'),
 ]
