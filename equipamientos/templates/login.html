@@ -1,0 +1,66 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login - HALCÓN</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #e5e5e5;
+  -webkit-box-shadow: 0 0 0px 1000px #0f0f0f inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
+</style>
+</head>
+<body class="bg-[#0a0a0a] min-h-screen flex items-center justify-center p-4">
+<div class="bg-[#151515] border border-[#262626] rounded-[24px] w-full max-w-[400px] p-8">
+  <div class="flex flex-col items-center mb-8">
+    <img src="/static/logo_halcon_circular.png" style="width:78px;height:78px;border-radius:50%;border:2px solid #ff8c00;object-fit:cover" class="mb-4">
+    <b style="font-size:22px;letter-spacing:1px;color:#e0e0e0">HALCÓN</b>
+    <span style="font-size:13px;color:#ff8c00;font-weight:700;letter-spacing:1px">EQUIPAMIENTOS</span>
+    <div class="text-[11px] text-zinc-500 mt-2">Acceso privado</div>
+  </div>
+  
+  <div id="error" class="hidden bg-red-900/30 border border-red-800 text-red-300 text-xs p-3 rounded-full mb-4 text-center"></div>
+  
+  <label class="text-[11px] text-zinc-400">Usuario</label>
+  <input id="username" type="text" placeholder="Ej: balbuena" class="w-full bg-[#0f0f0f] border border-[#333] rounded-full px-4 py-3 text-sm mb-3 outline-none focus:border-yellow-400 text-white placeholder-zinc-600">
+  
+  <label class="text-[11px] text-zinc-400">Contraseña</label>
+  <input id="password" type="password" placeholder="••••••••" class="w-full bg-[#0f0f0f] border border-[#333] rounded-full px-4 py-3 text-sm mb-6 outline-none focus:border-yellow-400 text-white placeholder-zinc-600" onkeypress="if(event.key==='Enter') hacerLogin()">
+  
+  <button onclick="hacerLogin()" id="btnLogin" class="w-full bg-[#facc15] text-black font-black py-3 rounded-full text-sm hover:bg-yellow-300">Ingresar ›</button>
+  
+  <div class="text-center mt-6 text-[10px] text-zinc-600">Sistema supervisado por Halcon Sistemas<br>Soporte: 2983-512672 / 3843-400199</div>
+</div>
+<script>
+function hacerLogin(){
+  let btn = document.getElementById('btnLogin');
+  let err = document.getElementById('error');
+  btn.textContent = 'Verificando...';
+  btn.disabled = true;
+  err.classList.add('hidden');
+  
+  fetch('/login/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+    body: JSON.stringify({username: document.getElementById('username').value, password: document.getElementById('password').value})
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok){
+      if(d.is_super) window.location = '/super-admin/';
+      else window.location = '/';
+    } else {
+      err.textContent = d.error;
+      err.classList.remove('hidden');
+      btn.textContent = 'Ingresar ›';
+      btn.disabled = false;
+    }
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,189 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>HALCON - Inicio</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="icon" href="/static/logo_halcon_circular.png">
+{% load formato %}
+<style>
+body{background:#0f0f0f;color:#e0e0e0;font-family:Inter}.navbar{background:#161616;border-bottom:1px solid #222}
+.card-dark{background:#1c1c1c;border:1px solid #2a2a2a;border-radius:18px;padding:20px}
+.kpi-yellow{background:#FFD600;color:#000;border-radius:18px;padding:20px}.kpi-green{background:#0f2318;color:#5ee9a0;border-radius:18px;padding:20px;border:1px solid #1a3d32}
+.btn-yellow{background:#FFD600;color:#000;font-weight:800;border-radius:12px;border:none;padding:10px 18px}
+.tab-active{background:#FFD600;color:#000;border-radius:20px;padding:8px 16px;font-weight:700;border:none;text-decoration:none}.tab{background:transparent;color:#888;padding:8px 16px;border:none;border-radius:20px;text-decoration:none}
+.pill{background:#2a2a2a;border-radius:20px;padding:4px 10px;font-size:12px}
+.stock-item{background:#142a1e;border:1px solid #1e3a2a;border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.table-detalle thead th{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #2a2a2a;padding:10px 8px;background:#161616}
+.table-detalle tbody td{font-size:12px;padding:10px 8px;border-bottom:1px solid #1e1e1e;vertical-align:middle}
+.badge-pago{border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;border:1px solid}
+.pago-efectivo{background:rgba(74,222,128,0.15);color:#4ade80;border-color:rgba(74,222,128,0.3)}
+.pago-transferencia{background:rgba(96,165,250,0.15);color:#60a5fa;border-color:rgba(96,165,250,0.3)}
+.pago-tarjeta{background:rgba(250,204,21,0.15);color:#facc15;border-color:rgba(250,204,21,0.3)}
+.pago-cuenta{background:rgba(167,139,250,0.15);color:#a78bfa;border-color:rgba(167,139,250,0.3)}
+.caja-card{background:linear-gradient(135deg,#0f2318 0%,#122a1d 100%);border:1px solid #1e4d33;border-radius:18px;padding:20px}
+.btn-caja-gasto{background:#ef4444;color:#fff;border:none;border-radius:10px;padding:4px 10px;font-size:11px;font-weight:800}
+.btn-caja-ingreso{background:#22c55e;color:#000;border:none;border-radius:10px;padding:4px 10px;font-size:11px;font-weight:800}
+.mov-item{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e3328;font-size:11px}
+</style></head><body>
+<nav class="navbar px-4 py-3 d-flex justify-content-between align-items-center">
+<div class="d-flex align-items-center gap-3">
+<img src="/static/logo_halcon_circular.png" style="width:62px;height:62px;border-radius:50%;border:2px solid #ff8c00;object-fit:cover">
+<div style="line-height:1"><b style="font-size:20px;letter-spacing:1px">HALCÓN</b><br><span style="font-size:13px;color:#ff8c00;font-weight:700;letter-spacing:1px">EQUIPAMIENTOS</span></div>
+<div class="ms-4 d-flex gap-1 p-1" style="background:#1c1c1c;border-radius:30px">
+<a href="/" class="tab-active">🏠 Inicio</a>
+<a href="/productos/" class="tab">📦 Productos</a>
+<a href="/listas/" class="tab">💲 Listas</a>
+<a href="/presupuestos/" class="tab">📄 Presupuestos</a>
+<a href="/ventas/" class="tab" style="background:#4ade8020;color:#4ade80;border:1px solid #4ade8030">💰 Ventas</a>
+<!-- BOTON CAJA NUEVO - DONDE MARCASTE EN ROJO -->
+<a href="/caja/" class="tab" style="background:#FFD60020;color:#FFD600;border:1px solid #FFD60040;font-weight:700">📒 CAJA</a>
+</div></div><a href="/presupuestos/" class="btn-yellow text-decoration-none">+ Nuevo Presupuesto</a>
+</nav>
+<div class="container-fluid p-4">
+
+<div class="row g-3 mb-3">
+<div class="col-md-3"><div class="kpi-yellow"><small>TOTAL VENDIDO REAL</small><h2 class="mt-2 fw-bold">{{total_acum|ars}}</h2><small>{{count_total}} ventas reales</small></div></div>
+<div class="col-md-3"><div class="card-dark"><small class="text-secondary">VENTAS ÚLTIMOS 30 DÍAS</small><h2 class="mt-2">{{total_mes|ars}}</h2><small class="text-warning">{{count_mes}} ventas</small></div></div>
+<div class="col-md-3"><div class="card-dark"><small class="text-secondary">TICKET PROMEDIO VENTA</small><h2 class="mt-2">{{ticket_prom|ars}}</h2><small class="text-secondary">promedio por venta</small></div></div>
+<div class="col-md-3">
+  <div class="caja-card">
+    <div class="d-flex justify-content-between align-items-center">
+      <small class="fw-bold" style="letter-spacing:1px;color:#4ade80">💰 CAJA REAL</small>
+      <div class="d-flex gap-1">
+        <button onclick="abrirModalCaja('EGRESO')" class="btn-caja-gasto">- Gasto</button>
+        <button onclick="abrirModalCaja('INGRESO')" class="btn-caja-ingreso">+ Ingreso</button>
+      </div>
+    </div>
+    <h2 class="mt-2 fw-bold" style="color:#fff">{{saldo_caja|ars}}</h2>
+    <div class="d-flex gap-3 mt-1">
+      <small style="color:#4ade80">▲ {{ingresos_mes|ars}} mes</small>
+      <small style="color:#ef4444">▼ {{egresos_mes|ars}} gastos</small>
+    </div>
+    <div class="mt-3" style="max-height:110px;overflow:auto">
+      {% for m in movimientos_caja %}
+      <div class="mov-item">
+        <span style="color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">{{m.fecha|date:"d/m H:i"}} - {{m.concepto|truncatechars:22}}</span>
+        <b style="color:{% if m.tipo == 'INGRESO' %}#4ade80{% else %}#ef4444{% endif %}">{% if m.tipo == 'EGRESO' %}-{% else %}+{% endif %}{{m.monto|ars}}</b>
+      </div>
+      {% empty %}
+      <small class="text-secondary">Sin movimientos de caja</small>
+      {% endfor %}
+    </div>
+    <a href="/caja/" style="font-size:11px;color:#4ade80;text-decoration:none;font-weight:700" class="mt-2 d-block">Ver detalle completo →</a>
+  </div>
+</div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-9">
+    <div class="card-dark" style="height:420px;display:flex;flex-direction:column">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0">💰 Detalle de Ventas Realizadas - Fecha, Hora y Forma de Pago</h6>
+        <div class="d-flex gap-2 align-items-center">
+          <span class="pill" style="background:#4ade80;color:#000;font-weight:700;font-size:11px">{{count_total}} ventas</span>
+          <a href="/ventas/" style="font-size:11px;color:#4ade80;text-decoration:none">Ver todas →</a>
+        </div>
+      </div>
+      <div style="flex:1;overflow:auto">
+        <table class="table table-dark table-detalle mb-0" style="--bs-table-bg:transparent">
+          <thead><tr><th>ID VENTA</th><th>CLIENTE</th><th>FECHA</th><th>HORA</th><th>FORMA DE PAGO</th><th class="text-end">TOTAL</th><th class="text-center">ORIGEN</th></tr></thead>
+          <tbody>
+            {% for v in ventas_recientes %}
+            <tr>
+              <td><b style="font-family:monospace;color:#4ade80">{{v.codigo}}</b></td>
+              <td><div style="font-weight:600;color:#fff">{{v.cliente.nombre|truncatechars:18}}</div><small style="font-size:10px;color:#666">{{v.vehiculo|default:""}}</small></td>
+              <td><span style="color:#fff">{{v.fecha_venta|date:"d/m/Y"}}</span><br><small style="font-size:10px;color:#666">{{v.fecha_venta|date:"l"}}</small></td>
+              <td><span style="background:#2a2a2a;padding:3px 8px;border-radius:10px;font-size:11px;font-family:monospace">{{v.fecha_venta|date:"H:i"}} hs</span></td>
+              <td>
+                {% if v.forma_pago == 'EFECTIVO' %}<span class="badge-pago pago-efectivo">💵 Efectivo</span>
+                {% elif v.forma_pago == 'TRANSFERENCIA' %}<span class="badge-pago pago-transferencia">🏦 Transferencia</span>
+                {% elif v.forma_pago == 'TARJETA' %}<span class="badge-pago pago-tarjeta">💳 Tarjeta</span>
+                {% elif v.forma_pago == 'CUENTA_CORRIENTE' %}<span class="badge-pago pago-cuenta">📒 Cta.Cte</span>
+                {% else %}<span class="badge-pago" style="background:#2a2a2a;color:#888">{{v.forma_pago}}</span>{% endif %}
+              </td>
+              <td class="text-end"><b style="color:#fff">{{v.total|ars}}</b></td>
+              <td class="text-center"><small style="color:#666;font-family:monospace">{{v.presupuesto.codigo|default:"Directa"}}</small></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="text-center py-5"><div style="font-size:32px">💰</div><div class="text-secondary mt-2">Aún no hay ventas registradas</div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="kpi-green" style="height:420px;display:flex;flex-direction:column">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <small class="fw-bold">⚠ STOCK BAJO</small>
+        <span style="background:#4ade80;color:#000;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:800">{{stock_bajo|length}} productos</span>
+      </div>
+      <div style="flex:1;overflow:auto;padding-right:4px">
+        {% for p in stock_bajo %}
+        <div class="stock-item">
+          <div class="d-flex justify-content-between align-items-start">
+            <div style="flex:1;min-width:0">
+              <div class="d-flex align-items-center gap-2"><b style="font-size:11px;color:#fff;font-family:monospace">{{p.codigo}}</b><span style="background:#ef444420;color:#ef4444;border:1px solid #ef444440;border-radius:10px;padding:1px 6px;font-size:9px">CRÍTICO</span></div>
+              <div style="font-size:11px;color:#cbd5c0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">{{p.nombre}}</div>
+            </div>
+            <div class="d-flex align-items-center gap-2 ms-2">
+              <div class="text-end"><div style="font-weight:900;font-size:14px;color:#fff;line-height:1">{{p.stock}}</div></div>
+              <button onclick="sumarStock({{p.id}},1)" style="width:26px;height:26px;border-radius:50%;background:#FFD600;color:#000;border:none;font-size:11px;font-weight:800">+1</button>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-8">
+    <div class="card-dark">
+      <div class="d-flex justify-content-between"><h6>📄 Últimos Presupuestos (pendientes de vender)</h6><a href="/presupuestos/" style="font-size:11px;color:#888;text-decoration:none">Ver todos →</a></div>
+      <table class="table table-dark table-detalle mt-3 mb-0" style="--bs-table-bg:transparent">
+        <thead><tr><th>ID PRES</th><th>CLIENTE</th><th>TOTAL</th><th>ESTADO</th><th class="text-center">ACCIÓN</th></tr></thead>
+        <tbody>
+          {% for pr in presupuestos %}
+          <tr>
+            <td><b style="font-family:monospace;color:#FFD600">{{pr.codigo}}</b></td>
+            <td>{{pr.cliente.nombre|truncatechars:18}}</td>
+            <td><b>{{pr.total|ars}}</b></td>
+            <td>{% if pr.venta %}<span class="badge-pago pago-efectivo">✅ {{pr.venta.codigo}}</span>{% else %}<span class="badge-pago" style="background:#2a2a2a;color:#888">Pendiente</span>{% endif %}</td>
+            <td class="text-center">{% if not pr.venta %}<button onclick="venderRapido('{{pr.codigo}}')" style="font-size:10px;background:#4ade80;color:#000;border:none;border-radius:10px;padding:4px 10px;font-weight:700">Vender</button>{% else %}<small style="color:#4ade80">{{pr.venta.forma_pago}}</small>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card-dark"><h6>🏆 Top 5 Más Pedidos</h6><div class="row mt-3">{% for t in top_productos %}<div class="col-md-12 mb-2"><div class="d-flex justify-content-between align-items-center p-2" style="background:#222;border-radius:10px"><div><b class="small">{{t.producto__codigo}}</b><br><small class="text-secondary">{{t.producto__nombre|truncatechars:28}}</small></div><span class="pill bg-warning text-dark">{{t.veces}}x</span></div></div>{% endfor %}</div></div>
+    <div class="card-dark mt-3"><h6>👥 Últimos Clientes</h6>{% for c in clientes_nuevos %}<div class="d-flex justify-content-between mt-2 small"><span>{{c.nombre}}</span><span class="text-secondary">{{c.telefono}}</span></div>{% endfor %}</div>
+  </div>
+</div>
+
+<div class="mt-4 p-3 text-center small text-secondary" style="border-top:1px solid #222">📍 {{datos.direccion}} | 📱 {{datos.whatsapp}} | 📷 @{{datos.instagram}} | {{datos.condiciones}}</div>
+</div>
+
+<div id="modalCaja" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#1c1c1c;border:1px solid #333;border-radius:18px;padding:24px;width:400px">
+    <h6 id="modalCajaTitulo" style="color:#fff">Nuevo Movimiento</h6>
+    <input type="hidden" id="caja_tipo">
+    <input id="caja_concepto" placeholder="Concepto: Ej: Combustible, Alquiler, Flete..." style="width:100%;background:#111;border:1px solid #333;color:#fff;border-radius:10px;padding:10px;margin-top:12px">
+    <input id="caja_monto" type="number" placeholder="Monto $" style="width:100%;background:#111;border:1px solid #333;color:#fff;border-radius:10px;padding:10px;margin-top:10px">
+    <select id="caja_forma" style="width:100%;background:#111;border:1px solid #333;color:#fff;border-radius:10px;padding:10px;margin-top:10px">
+      <option value="EFECTIVO">Efectivo</option><option value="TRANSFERENCIA">Transferencia</option><option value="TARJETA">Tarjeta</option><option value="CUENTA_CORRIENTE">Cuenta Corriente</option>
+    </select>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button onclick="document.getElementById('modalCaja').style.display='none'" style="flex:1;background:#222;color:#fff;border:none;border-radius:10px;padding:10px">Cancelar</button>
+      <button id="btnGuardarCaja" onclick="guardarMovimientoCaja()" style="flex:1;border:none;border-radius:10px;padding:10px;font-weight:800">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function sumarStock(id,cant){ if(!confirm('¿Sumar '+cant+' unidades?')) return; fetch('/api/stock/sumar/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,cantidad:cant})}).then(r=>r.json()).then(d=>{ if(d.ok) location.reload(); });}
+function venderRapido(codigo){let pago=prompt('Forma de pago:','EFECTIVO'); if(!pago) return; fetch('/api/convertir_a_venta/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo_presupuesto:codigo,forma_pago:pago.toUpperCase()})}).then(r=>r.json()).then(d=>{ if(d.ok){ alert('Venta '+d.codigo_venta+' creada'); location.reload(); } else alert('Error: '+d.error); });}
+function abrirModalCaja(tipo){document.getElementById('caja_tipo').value=tipo; document.getElementById('modalCaja').style.display='flex'; let t=document.getElementById('modalCajaTitulo'); let b=document.getElementById('btnGuardarCaja'); if(tipo=='EGRESO'){ t.innerHTML='➖ Nuevo Gasto'; t.style.color='#ef4444'; b.style.background='#ef4444'; b.style.color='#fff'; b.innerText='Guardar Gasto'; } else { t.innerHTML='➕ Ingreso Manual'; t.style.color='#22c55e'; b.style.background='#22c55e'; b.style.color='#000'; b.innerText='Guardar Ingreso'; } document.getElementById('caja_concepto').value=''; document.getElementById('caja_monto').value='';}
+function guardarMovimientoCaja(){let tipo=document.getElementById('caja_tipo').value; let concepto=document.getElementById('caja_concepto').value; let monto=document.getElementById('caja_monto').value; let forma=document.getElementById('caja_forma').value; if(!concepto||!monto) return alert('Completa concepto y monto'); fetch('/api/caja_movimiento/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:tipo,concepto:concepto,monto:monto,forma_pago:forma})}).then(r=>r.json()).then(d=>{ if(d.ok) location.reload(); else alert('Error: '+d.error); });}
+</script>
+</body></html>

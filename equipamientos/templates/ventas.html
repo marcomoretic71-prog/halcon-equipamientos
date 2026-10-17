@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>HALCON - Ventas</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+{% load formato %}
+<style>
+body{background:#0f0f0f;color:#e0e0e0;font-family:Inter,system-ui}.navbar{background:#161616;border-bottom:1px solid #222}
+.card-dark{background:#1c1c1c;border:1px solid #2a2a2a;border-radius:20px;padding:20px}
+.kpi-yellow{background:#FFD600;color:#000;border-radius:20px;padding:24px}
+.kpi-mini{background:#1c1c1c;border:1px solid #2a2a2a;border-radius:16px;padding:16px 18px}
+.btn-yellow{background:#FFD600;color:#000;font-weight:800;border-radius:12px;border:none;padding:10px 18px}
+.tab{background:transparent;color:#888;padding:8px 16px;border:none;border-radius:20px;text-decoration:none;font-size:13px}
+.tab-active{background:#FFD600;color:#000;border-radius:20px;padding:8px 16px;font-weight:700;border:none;text-decoration:none;font-size:13px}
+.table-detalle thead th{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #2a2a2a;padding:12px 10px;background:#161616;position:sticky;top:0;z-index:2}
+.table-detalle tbody td{font-size:12px;padding:12px 10px;border-bottom:1px solid #1e1e1e;vertical-align:middle}
+.badge-pago{border-radius:20px;padding:4px 10px;font-size:10px;font-weight:700;border:1px solid}
+.pago-efectivo{background:rgba(74,222,128,0.15);color:#4ade80;border-color:rgba(74,222,128,0.3)}
+.pago-transferencia{background:rgba(96,165,250,0.15);color:#60a5fa;border-color:rgba(96,165,250,0.3)}
+.pago-tarjeta{background:rgba(250,204,21,0.15);color:#facc15;border-color:rgba(250,204,21,0.3)}
+.pago-cuenta{background:rgba(167,139,250,0.15);color:#a78bfa;border-color:rgba(167,139,250,0.3)}
+.modal-dark{background:#1c1c1c;border:1px solid #333;border-radius:20px}
+.input-dark{background:#111;border:1px solid #333;color:#fff;border-radius:10px;padding:10px 12px;width:100%}
+.input-dark:focus{outline:none;border-color:#FFD600}
+.prod-row:hover{background:#222}
+.filter-pill{background:#1e1e1e;border:1px solid #2a2a2a;border-radius:20px;padding:6px 12px;color:#aaa;font-size:12px}
+</style>
+</head><body>
+<nav class="navbar px-4 py-3 d-flex justify-content-between align-items-center">
+<div class="d-flex align-items-center gap-3">
+<img src="/static/logo_halcon_circular.png" style="width:56px;height:56px;border-radius:50%;border:2px solid #ff8c00;object-fit:cover">
+<div style="line-height:1"><b style="font-size:19px;letter-spacing:1px">HALCÓN</b><br><span style="font-size:11px;color:#ff8c00;font-weight:700;letter-spacing:1px">EQUIPAMIENTOS</span></div>
+<div class="ms-4 d-flex gap-1 p-1" style="background:#1c1c1c;border-radius:30px">
+<a href="/" class="tab">🏠 Inicio</a>
+<a href="/productos/" class="tab">📦 Productos</a>
+<a href="/listas/" class="tab" style="color:#4ade80">💲 Listas</a>
+<a href="/presupuestos/" class="tab">📄 Presupuestos</a>
+<a href="/ventas/" class="tab-active">💰 Ventas</a>
+<a href="/caja/" class="tab" style="background:#FFD60020;color:#FFD600;border:1px solid #FFD60040;font-weight:700">📒 CAJA</a>
+</div></div>
+<div class="d-flex gap-2">
+<button onclick="abrirVentaDirecta()" style="background:#4ade80;color:#000;font-weight:800;border-radius:12px;border:none;padding:10px 18px;font-size:13px">+ Venta Directa</button>
+<a href="/" class="btn-yellow text-decoration-none" style="font-size:13px">← Dashboard</a>
+</div>
+</nav>
+
+<div class="container-fluid p-4">
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="kpi-yellow h-100">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <small style="font-weight:800;letter-spacing:1px;opacity:0.8">TOTAL VENDIDO</small>
+          <span style="background:#000;color:#FFD600;padding:3px 8px;border-radius:20px;font-size:10px;font-weight:900">{{ count_ventas }} VENTAS</span>
+        </div>
+        <div style="font-size:32px;font-weight:900;margin-top:12px;letter-spacing:-0.5px">{{ total_ventas|ars }}</div>
+        <div style="font-size:12px;margin-top:6px;opacity:0.7">Acumulado real de caja • Stock ya descontado</div>
+      </div>
+    </div>
+    <div class="col-md-8">
+      <div class="row g-3 h-100">
+        <div class="col-md-4"><div class="kpi-mini h-100"><div style="font-size:10px;color:#888">💵 EFECTIVO</div><div style="font-size:20px;font-weight:800;color:#4ade80;margin-top:8px">{{ total_efectivo|ars }}</div></div></div>
+        <div class="col-md-4"><div class="kpi-mini h-100"><div style="font-size:10px;color:#888">🏦 TRANSFERENCIA</div><div style="font-size:20px;font-weight:800;color:#60a5fa;margin-top:8px">{{ total_transfer|ars }}</div></div></div>
+        <div class="col-md-4"><div class="kpi-mini h-100"><div style="font-size:10px;color:#888">💳 TARJETA / OTROS</div><div style="font-size:20px;font-weight:800;color:#facc15;margin-top:8px">{{ total_tarjeta|ars }}</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-dark">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 class="mb-0" style="font-weight:800">📋 Historial de Ventas</h6>
+      <div class="d-flex gap-2">
+        <input id="filtroCliente" class="filter-pill" placeholder="🔍 Cliente..." style="width:200px" oninput="filtrarTabla()">
+        <span class="badge" style="background:#222;color:#888;border:1px solid #333" id="countFiltrado">{{ count_ventas }} ventas</span>
+      </div>
+    </div>
+    <div style="max-height:70vh;overflow:auto;border:1px solid #222;border-radius:12px">
+    <table class="table table-dark table-detalle mb-0" style="--bs-table-bg:transparent" id="tablaVentas">
+      <thead><tr><th>ID VENTA</th><th>CLIENTE</th><th>FECHA</th><th>PAGO</th><th class="text-end">TOTAL</th></tr></thead>
+      <tbody>
+        {% for v in ventas %}
+        <tr data-cliente="{{v.cliente.nombre|lower}} {{v.codigo|lower}}" data-pago="{{v.forma_pago}}" data-fecha="{{v.fecha_venta|date:'Y-m-d'}}">
+          <td><b style="font-family:monospace;color:#4ade80;font-size:11px">{{v.codigo}}</b></td>
+          <td><b style="color:#fff;font-size:12px">{{v.cliente.nombre|truncatechars:22}}</b></td>
+          <td style="font-size:11px">{{v.fecha_venta|date:"d/m/Y H:i"}}</td>
+          <td><span class="badge-pago pago-efectivo">{{v.forma_pago}}</span></td>
+          <td class="text-end"><b style="color:#fff">{{v.total|ars}}</b></td>
+        </tr>
+        {% empty %}<tr><td colspan="5" class="text-center py-5">No hay ventas</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL VENTA DIRECTA - VERSION SIMPLE QUE SI CARGA -->
+<div id="modalVentaDirecta" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;padding:20px">
+  <div class="modal-dark" style="width:100%;max-width:700px;max-height:90vh;overflow:auto;padding:24px">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 style="color:#4ade80" class="mb-0">💰 Nueva Venta Directa - LECTOR</h5>
+      <button onclick="cerrarVentaDirecta()" style="background:#222;color:#fff;border:none;border-radius:50%;width:32px;height:32px">✕</button>
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-md-6"><label class="small text-secondary">Cliente *</label><input id="vd_cliente" class="input-dark" placeholder="Ej: Juan Perez"></div>
+      <div class="col-md-3"><label class="small text-secondary">Tel</label><input id="vd_telefono" class="input-dark" placeholder="3843..."></div>
+      <div class="col-md-3"><label class="small text-secondary">Vehículo</label><input id="vd_vehiculo" class="input-dark" placeholder="Amarok"></div>
+    </div>
+
+    <div style="background:#FFD600;border-radius:12px;padding:10px;margin-bottom:12px;display:flex;gap:8px;align-items:center">
+      <span style="font-size:22px">📷</span>
+      <input id="vd_barcode" class="input-dark" style="background:#000;color:#FFD600;font-weight:900;font-family:monospace;font-size:15px;flex:1;border:2px solid #000" placeholder="ESCANEA AQUÍ - SE CARGA SOLO..." autocomplete="off">
+      <span id="vd_lector_status" style="background:#000;color:#FFD600;padding:5px 10px;border-radius:20px;font-size:10px;font-weight:900">ACTIVO</span>
+    </div>
+
+    <div id="vd_last_scan" style="display:none;background:#111;border:1px solid #22c55e;border-radius:10px;padding:10px;margin-bottom:10px">
+      <small style="color:#22c55e;font-weight:800">✓ AGREGADO:</small> <span id="vd_last_scan_detail" style="font-size:12px;color:#fff"></span>
+    </div>
+
+    <div class="mb-3">
+      <input id="vd_buscar" class="input-dark" placeholder="🔍 O buscar por nombre/código..." oninput="buscarProdDirecta(this.value)">
+      <div id="vd_resultados" style="background:#111;border:1px solid #333;border-radius:10px;margin-top:6px;max-height:180px;overflow:auto;display:none"></div>
+    </div>
+
+    <div id="vd_carrito" style="background:#111;border-radius:12px;padding:12px;margin-bottom:12px;min-height:80px">
+      <small class="text-secondary">Carrito vacío - escaneá productos</small>
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-6"><label class="small text-secondary">Forma de Pago</label><select id="vd_pago" class="input-dark"><option value="EFECTIVO">💵 Efectivo</option><option value="TRANSFERENCIA">🏦 Transferencia</option><option value="TARJETA">💳 Tarjeta</option><option value="CUENTA_CORRIENTE">📒 Cuenta Corriente</option></select></div>
+      <div class="col-md-6"><label class="small text-secondary">Total</label><div id="vd_total" style="background:#FFD600;color:#000;border-radius:10px;padding:10px 12px;font-weight:900;font-size:18px">$ 0</div></div>
+    </div>
+    <button onclick="guardarVentaDirecta()" style="width:100%;background:#4ade80;color:#000;font-weight:900;border:none;border-radius:12px;padding:14px;font-size:15px">✅ CONFIRMAR VENTA</button>
+  </div>
+</div>
+
+<script>
+function filtrarTabla(){
+  let q = document.getElementById('filtroCliente').value.toLowerCase();
+  document.querySelectorAll('#tablaVentas tbody tr').forEach(tr=>{
+    let cliente = tr.dataset.cliente||'';
+    tr.style.display = cliente.includes(q) ? '' : 'none';
+  });
+}
+let carritoDirecta=[]; let totalDirecta=0;
+function abrirVentaDirecta(){ document.getElementById('modalVentaDirecta').style.display='flex'; setTimeout(()=>{ document.getElementById('vd_barcode').focus(); }, 300); }
+function cerrarVentaDirecta(){ document.getElementById('modalVentaDirecta').style.display='none'; }
+
+// VERSION SUPER SIMPLE QUE SI CARGA - BUSCA Y AGREGA EL PRIMERO QUE ENCUENTRA
+function venderPorBarcode(code){
+  code = (code||'').toString().trim();
+  if(!code) return;
+  console.log('ESCANEADO:', code);
+  let status = document.getElementById('vd_lector_status');
+  status.textContent = 'BUSCANDO...';
+  fetch('/api/buscar_productos/?q='+encodeURIComponent(code)+'&cat=TODOS')
+    .then(r=>r.json())
+    .then(data=>{
+      console.log('Resultado API:', data);
+      if(data && data.length>0){
+        // agarra el que coincida exacto por barcode o codigo, sino el primero
+        let codeLower = code.toLowerCase();
+        let prod = data.find(p => (p.barcode && p.barcode.toString().toLowerCase() === codeLower) || (p.codigo && p.codigo.toString().toLowerCase() === codeLower));
+        if(!prod) prod = data[0]; // si no hay exacto, agarra el primero que devolvió la búsqueda
+        agregarProdDirecta(prod);
+        document.getElementById('vd_last_scan').style.display='block';
+        document.getElementById('vd_last_scan_detail').textContent = prod.codigo + ' - ' + prod.nombre.substring(0,40) + ' - $' + prod.precio;
+        status.textContent = '✓ OK';
+        status.style.background = '#22c55e';
+        status.style.color = '#000';
+        document.getElementById('vd_barcode').value = '';
+        setTimeout(()=>{ status.textContent='ACTIVO'; status.style.background='#000'; status.style.color='#FFD600'; document.getElementById('vd_barcode').focus(); }, 1000);
+      }else{
+        status.textContent = 'NO ENCONTRADO';
+        status.style.background = '#ef4444';
+        status.style.color = '#fff';
+        alert('Código '+code+' no encontrado en productos');
+        document.getElementById('vd_barcode').value='';
+        setTimeout(()=>{ status.textContent='ACTIVO'; status.style.background='#000'; status.style.color='#FFD600'; document.getElementById('vd_barcode').focus(); }, 2000);
+      }
+    })
+    .catch(err=>{
+      console.error(err);
+      status.textContent = 'ERROR';
+      alert('Error buscando: '+err);
+      document.getElementById('vd_barcode').value='';
+    });
+}
+
+function buscarProdDirecta(q){
+  if(q.length<2){ document.getElementById('vd_resultados').style.display='none'; return; }
+  fetch('/api/buscar_productos/?q='+encodeURIComponent(q)+'&cat=TODOS').then(r=>r.json()).then(data=>{
+    let box=document.getElementById('vd_resultados');
+    if(data.length==0){ box.innerHTML='<div class="p-2 small text-secondary">Sin resultados</div>'; box.style.display='block'; return; }
+    box.innerHTML = data.slice(0,8).map(p=>`<div class="d-flex justify-content-between align-items-center p-2" style="cursor:pointer;border-bottom:1px solid #222" onclick='agregarProdDirecta(${JSON.stringify(p).replace(/'/g,"&#39;")})'><div><b style="font-family:monospace;color:#FFD600;font-size:11px">${p.codigo}</b> <span style="font-size:12px;color:#fff">${p.nombre.substring(0,30)}</span></div><span style="background:#4ade80;color:#000;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:800">+ Agregar</span></div>`).join('');
+    box.style.display='block';
+  });
+}
+function agregarProdDirecta(prod){
+  let ex=carritoDirecta.find(x=>x.id==prod.id);
+  if(ex){ ex.cantidad++; } else{ carritoDirecta.push({id:prod.id,codigo:prod.codigo,nombre:prod.nombre,precio:prod.precio,cantidad:1}); }
+  document.getElementById('vd_resultados').style.display='none';
+  document.getElementById('vd_buscar').value='';
+  renderCarritoDirecta();
+}
+function renderCarritoDirecta(){
+  let box=document.getElementById('vd_carrito');
+  if(carritoDirecta.length==0){ box.innerHTML='<small class="text-secondary">Carrito vacío</small>'; document.getElementById('vd_total').innerText='$ 0'; return; }
+  totalDirecta=0; let html='';
+  carritoDirecta.forEach((it, idx)=>{
+    let sub=it.precio*it.cantidad; totalDirecta+=sub;
+    html+=`<div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid #222"><div><b style="font-size:11px;font-family:monospace;color:#FFD600">${it.codigo}</b> <span style="font-size:12px">${it.nombre.substring(0,30)}</span><br><small style="color:#888">$${it.precio} x ${it.cantidad} = $${sub.toFixed(0)}</small></div><div class="d-flex gap-1"><button onclick="cambiarCantDirecta(${idx},-1)" style="width:26px;height:26px;border-radius:50%;background:#222;color:#fff;border:1px solid #333">-</button><span style="font-weight:700;margin:0 4px">${it.cantidad}</span><button onclick="cambiarCantDirecta(${idx},1)" style="width:26px;height:26px;border-radius:50%;background:#FFD600;color:#000;border:none;font-weight:800">+</button><button onclick="quitarDirecta(${idx})" style="background:transparent;color:#ef4444;border:none;margin-left:6px">✕</button></div></div>`;
+  });
+  box.innerHTML=html; document.getElementById('vd_total').innerText='$ '+totalDirecta.toLocaleString('es-AR',{minimumFractionDigits:2});
+}
+function cambiarCantDirecta(idx, delta){ carritoDirecta[idx].cantidad+=delta; if(carritoDirecta[idx].cantidad<=0) carritoDirecta.splice(idx,1); renderCarritoDirecta(); }
+function quitarDirecta(idx){ carritoDirecta.splice(idx,1); renderCarritoDirecta(); }
+function guardarVentaDirecta(){
+  let cliente=document.getElementById('vd_cliente').value.trim();
+  if(!cliente){ alert('Poné nombre del cliente'); return; }
+  if(carritoDirecta.length==0){ alert('Agregá al menos un producto'); return; }
+  let data={cliente_nombre:cliente, telefono:document.getElementById('vd_telefono').value.trim(), vehiculo:document.getElementById('vd_vehiculo').value.trim(), forma_pago:document.getElementById('vd_pago').value, total:totalDirecta, items:carritoDirecta.map(i=>({id:i.id,cantidad:i.cantidad,precio:i.precio}))};
+  if(!confirm('¿Confirmar venta por $'+totalDirecta.toLocaleString('es-AR')+' a '+cliente+'?')) return;
+  fetch('/api/venta_directa/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r=>r.json()).then(d=>{ if(d.ok){ alert('✅ Venta '+d.codigo+' creada.'); location.reload(); } else alert('Error: '+d.error); });
+}
+
+// LECTOR: ENTER y también si el lector manda TAB
+document.getElementById('vd_barcode').addEventListener('keydown', function(e){
+  if(e.key==='Enter'){
+    e.preventDefault();
+    venderPorBarcode(this.value);
+  }
+});
+document.getElementById('vd_barcode').addEventListener('change', function(){
+  if(this.value.trim().length>2) venderPorBarcode(this.value);
+});
+</script>
+</body></html>

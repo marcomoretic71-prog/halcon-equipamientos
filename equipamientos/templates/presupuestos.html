@@ -1,0 +1,158 @@
+{% load formato %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Presupuestos - HALCÓN</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>body{background:#0a0a0a;color:#e5e5e5}</style>
+</head>
+<body>
+
+<!-- NAVBAR EXACTO DE INICIO + TODOS LOS BOTONES VISIBLES -->
+<nav class="sticky top-0 z-50 bg-[#161616] border-b border-[#222] px-4 py-3 flex items-center justify-between">
+  <div class="flex items-center gap-3">
+    <!-- LOGO EXACTO 62px BORDE NARANJA - IGUAL QUE INICIO Y PRODUCTOS -->
+    <img src="/static/logo_halcon_circular.png" style="width:62px;height:62px;border-radius:50%;border:2px solid #ff8c00;object-fit:cover">
+    <div style="line-height:1"><b style="font-size:20px;letter-spacing:1px;color:#e0e0e0">HALCÓN</b><br><span style="font-size:13px;color:#ff8c00;font-weight:700;letter-spacing:1px">EQUIPAMIENTOS</span></div>
+    
+    <!-- BARRA DE BOTONES - AHORA SIN hidden, SIEMPRE VISIBLE, CON SCROLL SI NO ENTRA -->
+    <div class="flex bg-[#1c1c1c] rounded-full p-1 gap-1 items-center ml-6 overflow-x-auto max-w-[75vw] scrollbar-none">
+      <a href="/" class="px-4 py-2 rounded-full text-sm text-zinc-400 hover:text-white whitespace-nowrap">🏠 Inicio</a>
+      <a href="/productos/" class="px-4 py-2 rounded-full text-sm text-zinc-400 hover:text-white whitespace-nowrap">📦 Productos</a>
+      <a href="/listas/" class="px-4 py-2 rounded-full text-sm text-zinc-400 hover:text-white whitespace-nowrap">💲 Listas</a>
+      <a href="/presupuestos/" class="px-4 py-2 rounded-full text-sm bg-[#facc15] text-black font-bold whitespace-nowrap">📄 Presupuestos</a>
+      <a href="/ventas/" class="px-4 py-2 rounded-full text-sm bg-[#22c55e]/20 text-[#4ade80] border border-[#22c55e]/30 font-bold whitespace-nowrap">💰 Ventas</a>
+      <a href="/caja/" class="px-4 py-2 rounded-full text-sm bg-[#facc15]/20 text-[#facc15] border border-[#facc15]/30 font-bold whitespace-nowrap">📒 CAJA</a>
+    </div>
+  </div>
+  <div class="flex items-center gap-2">
+    <a href="/caja/" class="hidden lg:flex bg-[#1a1a1a] border border-[#333] text-[#facc15] font-bold px-4 py-2.5 rounded-full text-xs">📒 Ver Caja</a>
+    <a href="/productos/" class="bg-[#facc15] text-black font-bold px-5 py-2.5 rounded-full text-sm">Ir a Productos</a>
+  </div>
+</nav>
+
+<div class="max-w-[1600px] mx-auto p-4">
+
+  <div class="bg-[#151515] border border-[#262626] rounded-[20px] p-4 md:p-5">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-bold text-[18px]">Crear Presupuesto Rápido</h2>
+    </div>
+
+    <form id="form-pres-principal" class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+      <input name="cliente" id="input-cliente" placeholder="Cliente *" class="w-full bg-[#0a0a0a] border border-[#333] rounded-full px-4 py-2.5 text-sm outline-none focus:border-[#facc15]" required>
+      <input name="vehiculo" id="input-vehiculo" placeholder="Vehículo / Año" class="w-full bg-[#0a0a0a] border border-[#333] rounded-full px-4 py-2.5 text-sm outline-none focus:border-[#facc15]">
+      <input name="telefono" id="input-tel" placeholder="Tel / WhatsApp" class="w-full bg-[#0a0a0a] border border-[#333] rounded-full px-4 py-2.5 text-sm outline-none focus:border-[#facc15]">
+      <select name="forma_pago" class="w-full bg-[#0a0a0a] border border-[#333] rounded-full px-4 py-2.5 text-sm outline-none focus:border-[#facc15]">
+        <option value="EFECTIVO">💵 Efectivo</option>
+        <option value="TRANSFERENCIA">🏦 Transferencia</option>
+        <option value="TARJETA">💳 Tarjeta</option>
+        <option value="CUENTA_CORRIENTE">📒 Cta.Cte</option>
+      </select>
+    </form>
+
+    <div class="relative mb-4">
+      <input id="busc-prod" placeholder="🔍 Buscar producto por código o nombre... ej: BAE-6, AMAROK, BATERIA" class="w-full bg-[#1e1e1e] border-2 border-[#2a2a2a] rounded-full px-5 py-3.5 text-sm outline-none focus:border-yellow-400 placeholder:text-zinc-600">
+      <div id="result-prod" class="absolute z-20 w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[12px] mt-2 max-h-[220px] overflow-auto hidden"></div>
+    </div>
+
+    <div id="carrito" class="space-y-2 min-h-[100px] border-2 border-dashed border-[#2a2a2a] rounded-[16px] p-4">
+      <div class="text-center py-4"><div class="text-sm text-zinc-400">Sin productos aún</div><div class="text-[11px] text-zinc-600 mt-1">Buscá arriba y tocá para agregar</div></div>
+    </div>
+
+    <div class="flex flex-col md:flex-row justify-between items-center gap-4 mt-6 pt-4 border-t border-[#222]">
+      <div class="text-[11px] text-zinc-500">📍 Ruta 89 Km. Quimili, SGO • 📱 2983512672 / 3843400199 • 📷 @halcon_equipamientos • Alias: halconequipamientos • Validez 15 días • Seña 10%</div>
+      <div class="flex items-center gap-4">
+        <div class="text-right"><div class="text-[11px] text-zinc-500">Total</div><div id="total-pres" class="font-black text-[24px] text-[#facc15]">$ 0,00</div><div class="text-[10px] text-zinc-600"><span id="forma-pago-label">💵 Efectivo</span></div></div>
+        <button onclick="generarPDF()" class="bg-[#facc15] text-black font-black px-8 py-3 rounded-full hover:bg-yellow-300 transition text-sm">Crear y Generar PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LISTADO ABAJO -->
+  <div class="bg-[#151515] border border-[#262626] rounded-[20px] p-5 mt-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-bold text-[16px]">📄 Presupuestos - {{ presupuestos|length }} emitidos</h2>
+      <div class="text-xs text-zinc-500">Total acumulado: <span class="text-white font-bold">$ {{ total_acumulado|ars }}</span></div>
+    </div>
+
+    <div class="bg-[#1a1a1a] rounded-[12px] overflow-hidden overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-[11px] text-zinc-500 uppercase tracking-widest border-b border-[#2a2a2a]">
+          <tr><th class="text-left p-3">COD</th><th class="text-left p-3">CLIENTE</th><th class="text-left p-3">VEHICULO</th><th class="text-left p-3">PAGO</th><th class="text-left p-3">FECHA</th><th class="text-right p-3">TOTAL</th><th class="text-center p-3">PDF</th></tr>
+        </thead>
+        <tbody class="divide-y divide-[#222]">
+          {% for pres in presupuestos %}
+          <tr class="hover:bg-[#222]">
+            <td class="p-3 font-mono text-xs text-zinc-400">{{ pres.codigo|default:pres.id }}</td>
+            <td class="p-3 font-medium">{{ pres.cliente.nombre|default:pres.cliente }}</td>
+            <td class="p-3 text-zinc-400">{{ pres.vehiculo }}</td>
+            <td class="p-3"><span class="text-[10px] bg-[#facc15]/20 text-[#facc15] px-2 py-1 rounded-full">💵 {{ pres.forma_pago|default:"EFECTIVO" }}</span></td>
+            <td class="p-3 text-zinc-500 text-xs">{{ pres.creado|date:"d/m H:i"|default:"-" }}</td>
+            <td class="p-3 text-right font-bold">{{ pres.total|ars }}</td>
+            <td class="p-3 text-center"><a href="/presupuesto/{{ pres.id }}/pdf/" class="bg-[#facc15] text-black px-3 py-1 rounded-full text-xs font-bold">PDF</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="p-10 text-center text-zinc-500">Aún no hay presupuestos. Creá el primero arriba ↑</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let carrito = [];
+let total = 0;
+function formatARS(n){ return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS'}).format(n); }
+let timeoutBusc;
+document.getElementById('busc-prod').addEventListener('input', e=>{
+  clearTimeout(timeoutBusc);
+  let q = e.target.value.trim();
+  if(q.length<2){ document.getElementById('result-prod').classList.add('hidden'); return; }
+  timeoutBusc = setTimeout(()=>{
+    fetch(`/api/buscar_productos/?q=${encodeURIComponent(q)}`).then(r=>r.json()).then(data=>{
+        let div = document.getElementById('result-prod');
+        div.innerHTML = '';
+        data.slice(0,8).forEach(p=>{
+          let row = document.createElement('div');
+          row.className='p-3 hover:bg-[#222] cursor-pointer flex justify-between text-[12px] border-b border-[#222]';
+          row.innerHTML=`<span>${p.codigo} - ${p.nombre}</span><span class="font-bold text-[#facc15]">${formatARS(p.precio)}</span>`;
+          row.onclick=()=>addProducto(p);
+          div.appendChild(row);
+        });
+        div.classList.remove('hidden');
+      });
+  },300);
+});
+function addProducto(p){ carrito.push({...p, cant:1}); renderCarrito(); document.getElementById('result-prod').classList.add('hidden'); document.getElementById('busc-prod').value=''; }
+function renderCarrito(){
+  let cont = document.getElementById('carrito');
+  if(carrito.length===0){ cont.innerHTML='<div class="text-center py-4"><div class="text-sm text-zinc-400">Sin productos aún</div><div class="text-[11px] text-zinc-600 mt-1">Buscá arriba y tocá para agregar</div></div>'; total=0; }
+  else {
+    cont.innerHTML=''; total=0;
+    carrito.forEach((item,idx)=>{
+      total+= item.precio * item.cant;
+      let div=document.createElement('div');
+      div.className='bg-[#0f0f0f] border border-[#222] rounded-[12px] p-2.5 flex justify-between items-center text-[11px]';
+      div.innerHTML=`<div class="flex-1 truncate pr-2"><div class="font-medium truncate">${item.nombre}</div><div class="text-[10px] text-zinc-500">${item.codigo} - ${formatARS(item.precio)}</div></div><div class="flex items-center gap-2"><div class="flex items-center gap-1 bg-[#1a1a1a] rounded-full px-2 py-1"><button onclick="carrito[${idx}].cant=Math.max(1,carrito[${idx}].cant-1);renderCarrito()" class="w-5 h-5 rounded-full bg-[#222]">-</button><span class="text-xs px-2">${item.cant}</span><button onclick="carrito[${idx}].cant++;renderCarrito()" class="w-5 h-5 rounded-full bg-[#222]">+</button></div><button onclick="carrito.splice(${idx},1);renderCarrito()" class="w-6 h-6 rounded-full bg-[#222] text-zinc-400">x</button></div>`;
+      cont.appendChild(div);
+    });
+  }
+  document.getElementById('total-pres').textContent=formatARS(total);
+}
+function generarPDF(){ 
+  let cliente=document.getElementById('input-cliente').value; 
+  if(!cliente){ alert('Poné el cliente'); return; } 
+  if(carrito.length===0){ alert('Agregá al menos un producto'); return; } 
+  // guarda carrito y envia
+  let form = document.createElement('form');
+  form.method='POST'; form.action='/api/generar_presupuesto/';
+  let input = document.createElement('input'); input.type='hidden'; input.name='data'; input.value=JSON.stringify({cliente: document.getElementById('input-cliente').value, vehiculo: document.getElementById('input-vehiculo').value, telefono: document.getElementById('input-tel').value, items: carrito, total: total});
+  form.appendChild(input); document.body.appendChild(form); form.submit();
+}
+</script>
+</body>
+</html>

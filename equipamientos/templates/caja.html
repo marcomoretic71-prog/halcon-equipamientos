@@ -1,0 +1,104 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>CAJA - Halcón Equipamientos</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+{% load formato %}
+<style>
+body{background:#0f0f0f;color:#e0e0e0;font-family:Inter}
+.navbar{background:#161616;border-bottom:1px solid #222}
+.card-dark{background:#1c1c1c;border:1px solid #2a2a2a;border-radius:18px;padding:20px}
+.btn-yellow{background:#FFD600;color:#000;font-weight:800;border-radius:12px;border:none;padding:10px 18px}
+.btn-caja-gasto{background:#ef4444;color:#fff;border:none;border-radius:10px;padding:8px 14px;font-weight:700}
+.btn-caja-ingreso{background:#22c55e;color:#000;border:none;border-radius:10px;padding:8px 14px;font-weight:700}
+.kpi{background:#1c1c1c;border-radius:16px;padding:16px;border:1px solid #2a2a2a}
+.table-caja thead th{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #2a2a2a;padding:12px 10px;background:#161616}
+.table-caja tbody td{font-size:13px;padding:12px 10px;border-bottom:1px solid #1e1e1e}
+.tab{padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:600}
+.tab-active{background:#FFD600;color:#000!important;font-weight:700}
+</style>
+</head><body>
+<nav class="navbar px-4 py-3 d-flex justify-content-between align-items-center">
+<div class="d-flex align-items-center gap-3">
+<img src="/static/logo_halcon_circular.png" style="width:62px;height:62px;border-radius:50%;border:2px solid #ff8c00;object-fit:cover">
+<div style="line-height:1"><b style="font-size:20px;letter-spacing:1px;color:#fff">HALCÓN</b><br><span style="font-size:13px;color:#ff8c00;font-weight:700;letter-spacing:1px">EQUIPAMIENTOS</span></div>
+<!-- TODOS LOS BOTONES CON COLORES COMO EN INICIO -->
+<div class="ms-4 d-flex gap-1 p-1" style="background:#1c1c1c;border-radius:30px">
+<a href="/" class="tab" style="color:#888">🏠 Inicio</a>
+<a href="/productos/" class="tab" style="color:#888">📦 Productos</a>
+<a href="/listas/" class="tab" style="color:#4ade80">💲 Listas</a>
+<a href="/presupuestos/" class="tab" style="color:#888">📄 Presupuestos</a>
+<a href="/ventas/" class="tab" style="background:#4ade8020;color:#4ade80;border:1px solid #4ade8030">💰 Ventas</a>
+<a href="/caja/" class="tab tab-active">📒 CAJA</a>
+</div></div>
+<div class="d-flex gap-2 align-items-center">
+<button onclick="abrirModalCaja('EGRESO')" class="btn-caja-gasto">- Gasto</button>
+<button onclick="abrirModalCaja('INGRESO')" class="btn-caja-ingreso">+ Ingreso</button>
+<a href="/presupuestos/" class="btn-yellow text-decoration-none">+ Nuevo Presupuesto</a>
+</div>
+</nav>
+
+<div class="container-fluid p-4">
+<div class="row g-3 mb-4">
+<div class="col-md-3"><div class="kpi" style="border-left:4px solid #4ade80"><small class="text-secondary">SALDO ACTUAL EN CAJA</small><h2 class="mt-2 fw-bold {% if saldo_actual < 0 %}text-danger{% else %}text-white{% endif %}">{{saldo_actual|ars}}</h2><small>Ingresos - Egresos totales</small></div></div>
+<div class="col-md-3"><div class="kpi" style="border-left:4px solid #22c55e"><small class="text-secondary">INGRESOS ({{mes_label}})</small><h2 class="mt-2" style="color:#4ade80">{{ingresos_filtrados|ars}}</h2><small>{{count_ingresos}} movimientos</small></div></div>
+<div class="col-md-3"><div class="kpi" style="border-left:4px solid #ef4444"><small class="text-secondary">EGRESOS ({{mes_label}})</small><h2 class="mt-2" style="color:#ef4444">{{egresos_filtrados|ars}}</h2><small>{{count_egresos}} gastos</small></div></div>
+<div class="col-md-3"><div class="kpi" style="border-left:4px solid #FFD600"><small class="text-secondary">BALANCE {{mes_label}}</small><h2 class="mt-2 fw-bold" style="color:#FFD600">{{balance_filtrado|ars}}</h2><small>Ganancia neta del periodo</small></div></div>
+</div>
+
+<div class="card-dark">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+<h5 class="mb-0">📒 Historial de Caja - Ingresos y Egresos</h5>
+<div class="d-flex gap-2 align-items-center flex-wrap">
+  <form method="get" class="d-flex gap-2 align-items-center">
+    <select name="mes" onchange="this.form.submit()" style="background:#111;border:1px solid #333;color:#fff;border-radius:8px;padding:6px 10px;font-size:12px">
+      <option value="">Todos los meses</option>
+      {% for m in meses_disponibles %}<option value="{{m.value}}" {% if m.value == mes_seleccionado %}selected{% endif %}>{{m.label}}</option>{% endfor %}
+    </select>
+    <select name="tipo" onchange="this.form.submit()" style="background:#111;border:1px solid #333;color:#fff;border-radius:8px;padding:6px 10px;font-size:12px">
+      <option value="">Todo</option><option value="INGRESO" {% if tipo_seleccionado == 'INGRESO' %}selected{% endif %}>Solo Ingresos</option><option value="EGRESO" {% if tipo_seleccionado == 'EGRESO' %}selected{% endif %}>Solo Egresos</option>
+    </select>
+  </form>
+</div>
+</div>
+
+<div class="table-responsive">
+<table class="table table-dark table-caja mb-0" style="--bs-table-bg:transparent">
+<thead><tr><th>FECHA</th><th>TIPO</th><th>CONCEPTO</th><th>FORMA PAGO</th><th class="text-end">MONTO</th><th>SALDO ACUM.</th><th class="text-center">🗑</th></tr></thead>
+<tbody>
+{% for mov in movimientos %}
+<tr>
+<td><span style="font-family:monospace">{{mov.fecha|date:"d/m/Y H:i"}}</span></td>
+<td>{% if mov.tipo == 'INGRESO' %}<span style="background:#22c55e20;color:#22c55e;border:1px solid #22c55e40;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">▲ INGRESO</span>{% else %}<span style="background:#ef444420;color:#ef4444;border:1px solid #ef444440;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">▼ EGRESO</span>{% endif %}</td>
+<td><b style="color:#fff">{{mov.concepto}}</b>{% if mov.venta %}<br><small style="color:#4ade80">{{mov.venta.codigo}}</small>{% endif %}</td>
+<td><small>{{mov.forma_pago}}</small></td>
+<td class="text-end"><b style="color:{% if mov.tipo == 'INGRESO' %}#4ade80{% else %}#ef4444{% endif %}">{% if mov.tipo == 'EGRESO' %}-{% else %}+{% endif %}{{mov.monto|ars}}</b></td>
+<td><small class="text-secondary">{{mov.saldo_acum|ars}}</small></td>
+<td class="text-center"><button onclick="eliminarMov({{mov.id}})" style="background:#222;color:#ef4444;border:1px solid #333;border-radius:8px;padding:3px 8px;font-size:11px">🗑</button></td>
+</tr>
+{% empty %}<tr><td colspan="7" class="text-center py-5 text-secondary">No hay movimientos</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div id="modalCaja" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#1c1c1c;border:1px solid #333;border-radius:18px;padding:24px;width:420px">
+    <h6 id="modalCajaTitulo" style="color:#fff">Nuevo Movimiento</h6>
+    <input type="hidden" id="caja_tipo">
+    <input id="caja_concepto" placeholder="Ej: Alquiler, Luz, Flete, Aporte..." style="width:100%;background:#111;border:1px solid #333;color:#fff;border-radius:10px;padding:10px;margin-top:12px">
+    <input id="caja_monto" type="number" placeholder="$" style="width:100%;background:#111;border:1px solid #333;color:#fff;border-radius:10px;padding:10px;margin-top:10px">
+    <select id="caja_forma" style="width:100%;background:#111;border:1px solid #333;color:#fff;border-radius:10px;padding:10px;margin-top:10px">
+      <option value="EFECTIVO">Efectivo</option><option value="TRANSFERENCIA">Transferencia</option><option value="TARJETA">Tarjeta</option><option value="CUENTA_CORRIENTE">Cuenta Corriente</option><option value="MERCADOPAGO">MercadoPago</option>
+    </select>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button onclick="document.getElementById('modalCaja').style.display='none'" style="flex:1;background:#222;color:#fff;border:none;border-radius:10px;padding:10px">Cancelar</button>
+      <button id="btnGuardarCaja" onclick="guardarMovimientoCaja()" style="flex:1;border:none;border-radius:10px;padding:10px;font-weight:800">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function abrirModalCaja(tipo){document.getElementById('caja_tipo').value=tipo; document.getElementById('modalCaja').style.display='flex'; let t=document.getElementById('modalCajaTitulo'); let b=document.getElementById('btnGuardarCaja'); if(tipo=='EGRESO'){ t.innerHTML='➖ Nuevo Gasto'; t.style.color='#ef4444'; b.style.background='#ef4444'; b.style.color='#fff'; b.innerText='Guardar Gasto'; } else { t.innerHTML='➕ Ingreso Manual'; t.style.color='#22c55e'; b.style.background='#22c55e'; b.style.color='#000'; b.innerText='Guardar Ingreso'; }}
+function guardarMovimientoCaja(){let tipo=document.getElementById('caja_tipo').value; let concepto=document.getElementById('caja_concepto').value; let monto=document.getElementById('caja_monto').value; let forma=document.getElementById('caja_forma').value; if(!concepto||!monto) return alert('Completa concepto y monto'); fetch('/api/caja_movimiento/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:tipo,concepto:concepto,monto:monto,forma_pago:forma})}).then(r=>r.json()).then(d=>{ if(d.ok) location.reload(); });}
+function eliminarMov(id){ if(!confirm('¿Eliminar?')) return; fetch('/api/caja_eliminar/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}).then(r=>r.json()).then(d=>{ if(d.ok) location.reload(); });}
+</script>
+</body></html>
