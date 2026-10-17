@@ -675,3 +675,18 @@ def api_cambiar_password(request):
         except Exception as e:
             return JsonResponse({'ok': False, 'error': str(e)})
     return JsonResponse({'ok': False})
+
+    @login_required
+@csrf_exempt
+def api_eliminar_item_lista(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            item_id = data.get('item_id')
+            if not item_id:
+                return JsonResponse({'ok': False, 'error': 'Falta item_id'})
+            ItemListaPrecio.objects.filter(id=item_id).delete()
+            return JsonResponse({'ok': True})
+        except Exception as e:
+            return JsonResponse({'ok': False, 'error': str(e)})
+    return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})

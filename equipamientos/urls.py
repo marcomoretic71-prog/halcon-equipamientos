@@ -40,4 +40,7 @@ urlpatterns = [
     path('api/super/bloquear/', views_super.api_bloquear_empresa, name='api_bloquear'),
     path('api/super/bloqueo-global/', views_super.api_bloqueo_global, name='api_bloqueo_global'),
     path('api/cambiar-password/', views.api_cambiar_password, name='cambiar_password'),
+
+    path('api/eliminar_item_lista/', views.api_eliminar_item_lista, name='api_eliminar_item_lista'),
+    path('api/limpiar_duplicados_lista/', views.api_limpiar_duplicados_lista, name='api_limpiar_duplicados_lista'),     
 ]
