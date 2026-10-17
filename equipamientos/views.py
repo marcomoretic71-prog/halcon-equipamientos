@@ -117,6 +117,7 @@ def caja_view(request):
         'tipo_seleccionado': tipo_param,
     })
 
+@login_required
 @csrf_exempt
 def api_caja_eliminar(request):
     if request.method == 'POST':
@@ -171,6 +172,7 @@ def ventas_view(request):
         'total_tarjeta': total_tarjeta, 'presupuestos': presupuestos, 'datos': DATOS_EMPRESA
     })
 
+@login_required
 def api_buscar_productos(request):
     q = request.GET.get('q','').strip()
     cat = request.GET.get('cat','TODOS').strip().upper()
@@ -215,6 +217,7 @@ def api_buscar_productos(request):
     except Exception as e:
         return JsonResponse([], safe=False)
 
+@login_required
 @csrf_exempt
 def api_guardar_producto(request):
     if request.method == 'POST':
@@ -239,6 +242,7 @@ def api_guardar_producto(request):
             return JsonResponse({'ok': False, 'error': str(e)})
     return JsonResponse({'ok': False})
 
+@login_required
 @csrf_exempt
 def crear_presupuesto(request):
     if request.method == 'POST':
@@ -262,6 +266,7 @@ def crear_presupuesto(request):
         return JsonResponse({'ok': True, 'codigo': codigo})
     return JsonResponse({'ok': False})
 
+@login_required
 @csrf_exempt
 def modificar_lista(request):
     if request.method == 'POST':
@@ -291,6 +296,7 @@ def modificar_lista(request):
         return JsonResponse({'ok': True})
     return JsonResponse({'ok': False})
 
+@login_required
 @csrf_exempt
 def editar_precio_item_lista(request):
     if request.method == 'POST':
@@ -313,6 +319,7 @@ def editar_precio_item_lista(request):
             return JsonResponse({'ok': False, 'error': str(e)})
     return JsonResponse({'ok': False})
 
+@login_required
 @csrf_exempt
 def api_sumar_stock(request):
     if request.method == 'POST':
@@ -323,6 +330,7 @@ def api_sumar_stock(request):
         return JsonResponse({'ok':True, 'nuevo_stock': p.stock})
     return JsonResponse({'ok':False})
 
+@login_required
 @csrf_exempt
 def api_reponer_codigo(request):
     if request.method == 'POST':
@@ -337,6 +345,7 @@ def api_reponer_codigo(request):
             return JsonResponse({'ok':False, 'error':'Código no encontrado'})
     return JsonResponse({'ok':False})
 
+@login_required
 @csrf_exempt
 def api_convertir_a_venta(request):
     if request.method == 'POST':
@@ -363,6 +372,7 @@ def api_convertir_a_venta(request):
             return JsonResponse({'ok': False, 'error': str(e)})
     return JsonResponse({'ok': False})
 
+@login_required
 @csrf_exempt
 def api_venta_directa(request):
     if request.method!= 'POST':
@@ -385,6 +395,7 @@ def api_venta_directa(request):
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)})
 
+@login_required
 @csrf_exempt
 def api_caja_movimiento(request):
     if request.method == 'POST':
@@ -396,11 +407,13 @@ def api_caja_movimiento(request):
             return JsonResponse({'ok': False, 'error': str(e)})
     return JsonResponse({'ok': False})
 
+@login_required
 def api_caja_lista(request):
     movs = MovimientoCaja.objects.order_by('-fecha')[:100]
     data = [{'id': m.id, 'fecha': m.fecha.strftime('%d/%m %H:%M'), 'tipo': m.tipo, 'concepto': m.concepto, 'monto': float(m.monto), 'forma_pago': m.forma_pago} for m in movs]
     return JsonResponse(data, safe=False)
 
+@login_required
 def pdf_presupuesto(request, codigo):
     pres = Presupuesto.objects.select_related('cliente').prefetch_related('items__producto').get(codigo=codigo)
     response = HttpResponse(content_type='application/pdf')
@@ -501,6 +514,7 @@ def pdf_presupuesto(request, codigo):
     p.save()
     return response
 
+@login_required
 @csrf_exempt
 def api_crear_lista(request):
     if request.method == 'POST':
@@ -524,7 +538,6 @@ def _limpiar_precio_br(valor):
     if not s:
         return 0
     s = s.replace("R$", "").replace("$", "").strip()
-    # Brasil usa . como miles y , como decimal
     if "," in s and "." in s:
         s = s.replace(".", "").replace(",", ".")
     elif "," in s:
@@ -534,6 +547,7 @@ def _limpiar_precio_br(valor):
     except:
         return 0
 
+@login_required
 @csrf_exempt
 def api_importar_lista_excel(request):
     if request.method != 'POST':
@@ -566,6 +580,7 @@ def api_importar_lista_excel(request):
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)})
 
+@login_required
 @csrf_exempt
 def api_exportar_lista_excel(request):
     try:
@@ -588,6 +603,7 @@ def api_exportar_lista_excel(request):
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)})
 
+@login_required
 @csrf_exempt
 def api_cambiar_password(request):
     if request.method == 'POST':
