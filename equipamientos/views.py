@@ -6,6 +6,7 @@ from django.utils import timezone
 from datetime import timedelta, datetime
 import json, uuid, os
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
@@ -22,6 +23,7 @@ DATOS_EMPRESA = {
     "footer": "¡Gracias por confiar en HALCÓN EQUIPAMIENTOS!"
 }
 
+@login_required
 def dashboard(request):
     hoy = timezone.now()
     hace_30 = hoy - timedelta(days=30)
@@ -58,6 +60,7 @@ def dashboard(request):
         'saldo_caja': saldo_caja, 'movimientos_caja': movimientos_caja
     })
 
+@login_required
 def caja_view(request):
     mes_param = request.GET.get('mes','')
     tipo_param = request.GET.get('tipo','')
@@ -126,14 +129,17 @@ def api_caja_eliminar(request):
             return JsonResponse({'ok': False, 'error': str(e)})
     return JsonResponse({'ok': False})
 
+@login_required
 def productos_view(request):
     categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
     return render(request, 'productos.html', {'categorias': categorias, 'count_productos': Producto.objects.count(), 'datos': DATOS_EMPRESA})
 
+@login_required
 def listas_view(request):
     listas = ListaPrecio.objects.prefetch_related('items__producto').all().order_by('nombre')
     return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA})
 
+@login_required
 def presupuestos_view(request):
     presupuestos = Presupuesto.objects.select_related('cliente').prefetch_related('items__producto').order_by('-creado')[:100]
     productos = Producto.objects.all().order_by('codigo')
@@ -147,6 +153,7 @@ def presupuestos_view(request):
         'datos': DATOS_EMPRESA
     })
 
+@login_required
 def ventas_view(request):
     ventas = Venta.objects.select_related('cliente','presupuesto').order_by('-fecha_venta')[:200]
     total_ventas = Venta.objects.aggregate(Sum('total'))['total__sum'] or 0
@@ -518,121 +525,4 @@ def _limpiar_precio_br(valor):
     if valor is None:
         return 0
     s = str(valor).strip()
-    if not s:
-        return 0
-    s = s.replace('$','').replace(' ','').strip()
-    if ',' in s and '.' in s:
-        s = s.replace('.','').replace(',','.')
-    elif ',' in s:
-        s = s.replace(',','.')
-    try:
-        m = re.findall(r'[\d\.]+', s)
-        return float(m[0]) if m else 0
-    except:
-        return 0
-
-@csrf_exempt
-@transaction.atomic
-def api_importar_lista_excel(request):
-    if request.method != 'POST':
-        return JsonResponse({'ok': False, 'error': 'POST requerido'})
-    try:
-        data = json.loads(request.body)
-        lista_id = data.get('lista_id','nueva')
-        nombre_nueva = data.get('nombre_nueva','').strip()
-        items = data.get('items', [])
-        if not items:
-            return JsonResponse({'ok': False, 'error': 'No se recibieron items'})
-        if lista_id == 'nueva':
-            if not nombre_nueva:
-                from datetime import datetime
-                nombre_nueva = f"BRACCO - {datetime.now().strftime('%d-%m-%Y')}"
-            lista, _ = ListaPrecio.objects.get_or_create(nombre=nombre_nueva, defaults={'porcentaje':0})
-        else:
-            lista = ListaPrecio.objects.get(id=lista_id)
-            if nombre_nueva and nombre_nueva != lista.nombre:
-                lista.nombre = nombre_nueva
-                lista.save()
-        creados = 0
-        actualizados = 0
-        for row in items:
-            codigo = str(row.get('codigo','')).strip().upper()
-            nombre_prod = str(row.get('nombre','')).strip()
-            if not codigo:
-                continue
-            precio = _limpiar_precio_br(row.get('precio',0))
-            if precio <= 0:
-                continue
-            if not nombre_prod:
-                nombre_prod = codigo
-            prod, is_new = Producto.objects.get_or_create(
-                codigo=codigo,
-                defaults={'nombre': nombre_prod, 'categoria': 'BRACCO', 'precio': precio, 'stock': 0}
-            )
-            if is_new:
-                creados += 1
-            else:
-                prod.nombre = nombre_prod
-                prod.precio = precio
-                if not prod.categoria or prod.categoria == 'OTRO':
-                    prod.categoria = 'BRACCO'
-                prod.save()
-                actualizados += 1
-            item, item_new = ItemListaPrecio.objects.get_or_create(
-                lista=lista,
-                producto=prod,
-                defaults={'precio': precio, 'precio_unitario': precio}
-            )
-            if not item_new:
-                item.precio = precio
-                item.precio_unitario = precio
-                item.save()
-        return JsonResponse({
-            'ok': True,
-            'creados': creados,
-            'actualizados': actualizados,
-            'lista_nombre': lista.nombre,
-            'lista_id': lista.id,
-            'total_lista': lista.items.count()
-        })
-    except ListaPrecio.DoesNotExist:
-        return JsonResponse({'ok': False, 'error': 'Lista no encontrada'})
-    except Exception as e:
-        return JsonResponse({'ok': False, 'error': str(e)})
-
-def api_exportar_lista_excel(request):
-    import csv
-    lista_id = request.GET.get('lista_id')
-    try:
-        lista = ListaPrecio.objects.get(id=lista_id)
-        response = HttpResponse(content_type='text/csv; charset=latin1')
-        response['Content-Disposition'] = f'attachment; filename="{lista.nombre}.csv"'
-        response.write(u'\ufeff'.encode('utf8'))
-        writer = csv.writer(response, delimiter=';', quoting=csv.QUOTE_MINIMAL)
-        writer.writerow(['CODIGO', 'NOMBRE', 'PRECIO'])
-        for item in lista.items.select_related('producto').all().order_by('producto__codigo'):
-            precio_str = str(item.precio).replace('.', ',')
-            writer.writerow([item.producto.codigo, item.producto.nombre, precio_str])
-        return response
-    except Exception as e:
-        return HttpResponse(f"Error: {e}", status=400)
-
-
-@csrf_exempt
-def api_cambiar_password(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            new_pass = data.get('new_password','').strip()
-            if len(new_pass) < 6:
-                return JsonResponse({'ok': False, 'error': 'Mínimo 6 caracteres'})
-            if not request.user.is_authenticated:
-                return JsonResponse({'ok': False, 'error': 'No autenticado'})
-            request.user.set_password(new_pass)
-            request.user.save()
-            from django.contrib.auth import update_session_auth_hash
-            update_session_auth_hash(request, request.user)
-            return JsonResponse({'ok': True})
-        except Exception as e:
-            return JsonResponse({'ok': False, 'error': str(e)})
-    return JsonResponse({'ok': False, 'error': 'Método no permitido'})
+    if not s

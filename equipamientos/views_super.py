@@ -16,7 +16,6 @@ def es_superadmin(user):
 def es_staff(user):
     return user.is_authenticated
 
-# ============ LOGIN ============
 def login_view(request):
     if request.user.is_authenticated:
         if es_superadmin(request.user):
@@ -24,27 +23,29 @@ def login_view(request):
         return redirect('/')
     
     if request.method == 'POST':
-        data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
-        username = data.get('username')
-        password = data.get('password')
-        user = authenticate(request, username=username, password=password)
-        if user:
-            login(request, user)
-            # Log
-            try:
-                ip = request.META.get('REMOTE_ADDR')
-                RegistroAcceso.objects.create(usuario=user.username, accion="LOGIN", ip=ip)
-            except:
-                pass
-            return JsonResponse({'ok': True, 'is_super': es_superadmin(user)})
-        return JsonResponse({'ok': False, 'error': 'Usuario o contraseña incorrectos'})
+        try:
+            data = json.loads(request.body) if request.content_type == 'application/json' else request.POST
+            username = data.get('username')
+            password = data.get('password')
+            user = authenticate(request, username=username, password=password)
+            if user:
+                login(request, user)
+                try:
+                    ip = request.META.get('REMOTE_ADDR')
+                    RegistroAcceso.objects.create(usuario=user.username, accion="LOGIN", ip=ip)
+                except:
+                    pass
+                return JsonResponse({'ok': True, 'is_super': es_superadmin(user)})
+            return JsonResponse({'ok': False, 'error': 'Usuario o contraseña incorrectos'})
+        except Exception as e:
+            return JsonResponse({'ok': False, 'error': str(e)})
+            
     return render(request, 'login.html')
 
 def logout_view(request):
     logout(request)
     return redirect('/login/')
 
-# ============ SUPER ADMIN DASHBOARD ============
 @login_required
 @user_passes_test(es_superadmin)
 def super_admin_dashboard(request):
@@ -53,16 +54,11 @@ def super_admin_dashboard(request):
     if not config:
         config = ConfigSistema.objects.create()
     
-    # Stats globales - de TODOS los clientes (si usas 1 BD por ahora, es del unico cliente)
     total_ventas = Venta.objects.aggregate(Sum('total'))['total__sum'] or 0
     ventas_hoy = Venta.objects.filter(fecha_venta__date=timezone.now().date()).aggregate(Sum('total'))['total__sum'] or 0
     total_productos = Producto.objects.count()
     total_presupuestos = Presupuesto.objects.count()
-    
-    # Ultimos accesos
     accesos = RegistroAcceso.objects.order_by('-fecha')[:20]
-    
-    # Caja global
     total_ing = MovimientoCaja.objects.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
     total_egr = MovimientoCaja.objects.filter(tipo='EGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
     saldo = total_ing - total_egr
@@ -118,13 +114,8 @@ def api_bloqueo_global(request):
         return JsonResponse({'ok': True})
     return JsonResponse({'ok': False})
 
-# Middleware check - llamalo en todas las vistas normales
 def check_sistema_bloqueado():
     config = ConfigSistema.objects.first()
     if config and config.bloqueado_global:
         return True, config.mensaje_bloqueo
     return False, ""
-
-# Para usar en dashboard, productos, etc:
-# if check_sistema_bloqueado()[0]: return render(request, 'bloqueado.html', {'mensaje': check_sistema_bloqueado()[1]})
-
