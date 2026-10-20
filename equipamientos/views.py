@@ -186,7 +186,8 @@ def api_buscar_productos(request):
             if 'barcode' in field_names:
                 query |= Q(barcode__icontains=q)
             productos = productos.filter(query)
-        productos = productos.order_by('codigo')[:2000]
+        # FIX: Subido a 5000 para que traiga los 235 de EQUIPAMIENTO completos
+        productos = productos.order_by('codigo')[:5000]
         data = []
         for p in productos:
             data.append({
@@ -342,8 +343,15 @@ def api_convertir_a_venta(request):
                 return JsonResponse({'ok': False, 'error': 'Este presupuesto ya es una venta'})
             codigo_venta = f"VEN-{uuid.uuid4().hex[:4].upper()}"
             venta = Venta.objects.create(codigo=codigo_venta, presupuesto=pres, cliente=pres.cliente, vehiculo=pres.vehiculo, colocacion=pres.colocacion, total=pres.total, forma_pago=forma_pago)
+            # FIX CRITICO: Crear ItemVenta para que la venta tenga historial completo y no se vacie si se borra un producto del presupuesto
             for item in pres.items.all():
                 prod = item.producto
+                ItemVenta.objects.create(
+                    venta=venta,
+                    producto=prod,
+                    cantidad=item.cantidad,
+                    precio=float(item.precio or item.precio_unitario or prod.precio)
+                )
                 prod.stock = max(0, prod.stock - item.cantidad)
                 prod.save()
             venta.stock_descontado = True
@@ -353,6 +361,7 @@ def api_convertir_a_venta(request):
         except Presupuesto.DoesNotExist:
             return JsonResponse({'ok': False, 'error': 'Presupuesto no encontrado'})
         except Exception as e:
+            import traceback; traceback.print_exc()
             return JsonResponse({'ok': False, 'error': str(e)})
     return JsonResponse({'ok': False})
 
@@ -563,7 +572,6 @@ def api_limpiar_duplicados_lista(request):
             return JsonResponse({'ok': False, 'error': str(e)})
     return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
 
-# === FIX CATEGORIAS + STOCK ===
 @login_required
 @csrf_exempt
 def api_actualizar_stock(request):
@@ -624,7 +632,6 @@ def api_importar_lista_excel(request):
                 lista, _ = ListaPrecio.objects.get_or_create(nombre__iexact=nombre_nueva, defaults={'nombre': nombre_nueva})
             else:
                 lista = ListaPrecio.objects.get(id=lista_id)
-            # FIX CATEGORIA: toma nombre base de la lista
             nombre_base = lista.nombre.split(' - ')[0].strip().upper() or 'OTRO'
             creados = 0
             actualizados = 0
@@ -723,6 +730,15 @@ def api_eliminar_producto(request, producto_id):
     try:
         producto = Producto.objects.get(id=producto_id)
         codigo = producto.codigo
+        
+        # FIX CRITICO: No permitir borrar productos con historial de ventas/presupuestos
+        if ItemVenta.objects.filter(producto=producto).exists():
+            return JsonResponse({'ok': False, 'error': f'⛔ No se puede borrar {codigo}: tiene VENTAS registradas. El historial está protegido.'})
+        if ItemPresupuesto.objects.filter(producto=producto).exists():
+            return JsonResponse({'ok': False, 'error': f'⛔ No se puede borrar {codigo}: tiene PRESUPUESTOS registrados. El historial está protegido.'})
+        
+        # Si no tiene historial, borrar solo de listas y luego el producto
+        ItemListaPrecio.objects.filter(producto=producto).delete()
         producto.delete()
         return JsonResponse({'ok': True, 'codigo': codigo})
     except Producto.DoesNotExist:
@@ -738,12 +754,16 @@ def api_limpiar_duplicados_global(request):
         return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
     try:
         borrados = 0
+        # FIX: No borrar si tiene ventas/presupuestos
         for p in Producto.objects.filter(codigo__endswith='.0'):
             base = p.codigo[:-2]
             orig = Producto.objects.filter(codigo__iexact=base).exclude(id=p.id).first()
             if orig:
+                if ItemVenta.objects.filter(producto=p).exists() or ItemPresupuesto.objects.filter(producto=p).exists():
+                    continue  # Saltar, tiene historial
                 orig.stock = (orig.stock or 0) + (p.stock or 0)
                 orig.save()
+                ItemListaPrecio.objects.filter(producto=p).delete()
                 p.delete()
                 borrados += 1
             else:

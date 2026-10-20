@@ -1,9 +1,10 @@
+{% load formato %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Productos - HALCÓN EQUIPAMIENTOS</title>
+<title>Productos - HALCON EQUIPAMIENTOS</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,system-ui}</style>
 </head>
@@ -11,7 +12,7 @@
 <nav class="sticky top-0 z-50 bg-[#111]/90 backdrop-blur border-b border-[#222] px-4 py-3 flex items-center justify-between">
   <div class="flex items-center gap-6">
     <a href="/" class="flex items-center gap-3">
-      <img src="/static/logo_halcon_circular.png" style="width:62px;height:62px;border-radius:50%;border:2px solid #ff8c00;object-fit:cover">
+      <img src="/static/logo_halcon_circular.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'" style="width:62px;height:62px;border-radius:50%;border:2px solid #ff8c00;object-fit:cover"><div style="display:none;width:62px;height:62px;border-radius:50%;background:#ff8c00;color:black;font-weight:900;font-size:22px;align-items:center;justify-content:center">H</div>
       <div style="line-height:1"><b style="font-size:20px;letter-spacing:1px;color:#e0e0e0">HALCÓN</b><br><span style="font-size:13px;color:#ff8c00;font-weight:700;letter-spacing:1px">EQUIPAMIENTOS</span></div>
     </a>
     <div class="hidden md:flex bg-[#1a1a1a] rounded-full p-1 gap-1 items-center">
@@ -36,7 +37,7 @@
     </div>
     <div class="bg-[#facc15] rounded-[12px] p-3 mb-4 flex gap-2 items-center border-2 border-black">
       <span class="text-xl">📷</span>
-      <input id="barcode_scanner" class="flex-1 bg-black text-[#facc15] font-mono font-black text-sm rounded-full px-4 py-2 outline-none placeholder:text-zinc-600" placeholder="ESCANEA CODIGO DE BARRAS AQUÍ" autofocus>
+      <input id="barcode_scanner" class="flex-1 bg-black text-[#facc15] font-mono font-black text-sm rounded-full px-4 py-2 outline-none placeholder:text-zinc-600" placeholder="ESCANEA CODIGO DE BARRAS AQUÍ - LECTOR SIEMPRE ACTIVO" autofocus>
       <span id="lector-status" class="bg-black text-[#facc15] text-[11px] font-black px-3 py-1.5 rounded-full">LECTOR ACTIVO</span>
     </div>
     <div id="scan-result" class="hidden mb-4 bg-[#0f0f0f] border-2 border-[#facc15] rounded-[12px] p-4">
@@ -55,7 +56,7 @@
       {% endfor %}
     </div>
     <div class="relative">
-      <input id="busc" autocomplete="off" placeholder="🔍 Buscar por código, nombre o código de barras..." class="w-full bg-[#0a0a0a] border-2 border-[#2a2a2a] rounded-full px-5 py-3.5 text-sm outline-none focus:border-[#facc15] placeholder:text-zinc-600">
+      <input id="busc" autocomplete="off" placeholder="🔍 Buscar por código, nombre o código de barras... Ej: BAE-6, 7790..., AMAROK" class="w-full bg-[#0a0a0a] border-2 border-[#2a2a2a] rounded-full px-5 py-3.5 text-sm outline-none focus:border-[#facc15] placeholder:text-zinc-600">
     </div>
   </div>
   <div id="grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
@@ -94,7 +95,15 @@ function filtrarInstantaneo(){
     });
   }
   document.getElementById('result-count2').textContent = filtrados.length;
-  renderGrid(filtrados.slice(0,60));
+  // Mostrar todos los filtrados (antes estaba limitado a 60)
+  renderGrid(filtrados);
+  if(filtrados.length > 100){
+    let grid = document.getElementById('grid');
+    let info = document.createElement('div');
+    info.className = 'col-span-3 text-center py-4 text-zinc-500 text-xs';
+    info.textContent = `Mostrando ${filtrados.length} productos de EQUIPAMIENTO`;
+    grid.appendChild(info);
+  }
 }
 function renderGrid(data){
   let grid = document.getElementById('grid');
@@ -124,19 +133,35 @@ function renderGrid(data){
     grid.appendChild(div);
   });
 }
+// --- NUEVO: ELIMINAR DEFINITIVO ---
 function eliminarProductoDefinitivo(id, codigo){
-  if(!confirm(`¿Eliminar DEFINITIVO ${codigo}?\n\nSe borrará de PRODUCTOS y de todas las LISTAS.`)) return;
+  if(!confirm(`¿Eliminar DEFINITIVO ${codigo}?\n\nSe borrará de PRODUCTOS y de todas las LISTAS.\nEsta acción no se puede deshacer.`)) return;
   if(!confirm(`Última confirmación: ¿Borrar ${codigo} para siempre?`)) return;
-  fetch(`/api/eliminar_producto/${id}/`, { method:'POST', headers:{'X-CSRFToken': getCSRF()} })
-  .then(r=>r.json()).then(data=>{
-    if(data.ok){ alert(`✅ ${data.codigo} eliminado`); todosProductos = todosProductos.filter(x=>x.id!==id); filtrarInstantaneo(); }
-    else alert('Error: '+data.error);
+  fetch(`/api/eliminar_producto/${id}/`, {
+    method: 'POST',
+    headers: { 'X-CSRFToken': getCSRF() }
+  })
+  .then(r=>r.json())
+  .then(data=>{
+    if(data.ok){
+      alert(`✅ ${data.codigo} eliminado de todo el sistema`);
+      todosProductos = todosProductos.filter(x=>x.id!==id);
+      filtrarInstantaneo();
+    } else {
+      alert('Error: ' + data.error);
+    }
   });
 }
 function limpiarDuplicadosGlobal(){
-  if(!confirm('¿Limpiar todos los productos con .0 duplicados?')) return;
+  if(!confirm('¿Limpiar todos los productos con .0 duplicados?\n\nEsto suma el stock y borra el duplicado.')) return;
   fetch('/api/limpiar_duplicados_global/', { method:'POST', headers:{'X-CSRFToken': getCSRF()} })
-  .then(r=>r.json()).then(d=>{ if(d.ok){ alert(`✅ Se limpiaron ${d.borrados} duplicados`); cargarTodos(); } else alert('Error: '+d.error); });
+  .then(r=>r.json())
+  .then(d=>{
+    if(d.ok){
+      alert(`✅ Se limpiaron ${d.borrados} duplicados`);
+      cargarTodos();
+    } else alert('Error: '+d.error);
+  });
 }
 function mostrarDetalleEscaneado(codigo){
   let p = todosProductos.find(x => x.codigo === codigo || x.barcode === codigo);
@@ -162,33 +187,85 @@ function mostrarDetalleEscaneado(codigo){
     </div>
   `;
   cont.scrollIntoView({behavior:'smooth', block:'center'});
+  let status = document.getElementById('lector-status');
+  status.textContent = '✓ ENCONTRADO';
+  status.style.background = '#22c55e';
+  status.style.color = 'black';
+  setTimeout(()=>{ status.textContent='LECTOR ACTIVO'; status.style.background='black'; status.style.color='#facc15'; }, 1500);
 }
 async function handleBarcodeScan(code){
-  code = code.trim();
+  code = code.trim().replace(/\r/g,'').replace(/\n/g,'');
   if(!code) return;
-  let p = todosProductos.find(x => (x.barcode && x.barcode.toLowerCase() === code.toLowerCase()) || (x.codigo && x.codigo.toLowerCase() === code.toLowerCase()));
-  if(p){ document.getElementById('busc').value = code; filtrarInstantaneo(); mostrarDetalleEscaneado(p.codigo); document.getElementById('barcode_scanner').value=''; return; }
+  let p = todosProductos.find(x => 
+    (x.barcode && x.barcode.toLowerCase() === code.toLowerCase()) || 
+    (x.codigo && x.codigo.toLowerCase() === code.toLowerCase())
+  );
+  if(p){
+    document.getElementById('busc').value = code;
+    filtrarInstantaneo();
+    mostrarDetalleEscaneado(p.codigo);
+    document.getElementById('barcode_scanner').value = '';
+    document.getElementById('barcode_scanner').focus();
+    return;
+  }
   try{
     let res = await fetch(`/api/buscar_productos/?q=${encodeURIComponent(code)}&cat=TODOS`);
     let data = await res.json();
-    if(data.length>0){ let e=data[0]; if(!todosProductos.find(x=>x.id===e.id)) todosProductos.push(e); document.getElementById('busc').value=code; filtrarInstantaneo(); mostrarDetalleEscaneado(e.codigo); }
-  }catch(e){}
-  document.getElementById('barcode_scanner').value='';
+    if(data.length > 0){
+      let encontrado = data.find(d => d.barcode === code || d.codigo === code) || data[0];
+      if(!todosProductos.find(x=>x.id===encontrado.id)) todosProductos.push(encontrado);
+      document.getElementById('busc').value = code;
+      filtrarInstantaneo();
+      mostrarDetalleEscaneado(encontrado.codigo);
+    }else{
+      let status = document.getElementById('lector-status');
+      status.textContent = '✕ NO EXISTE';
+      status.style.background = '#ef4444';
+      status.style.color = 'white';
+      setTimeout(()=>{ status.textContent='LECTOR ACTIVO'; status.style.background='black'; status.style.color='#facc15'; }, 2000);
+      if(confirm(`Código ${code} no existe. ¿Cargarlo?`)){
+        abrirModalProductoConCodigo(code, true);
+      }
+    }
+  }catch(e){ console.error(e); }
+  document.getElementById('barcode_scanner').value = '';
+  document.getElementById('barcode_scanner').focus();
 }
 function abrirModalProducto(){ document.getElementById('modalProducto').classList.remove('hidden'); document.getElementById('modalProducto').classList.add('flex'); document.getElementById('p_id').value=''; document.getElementById('p_codigo').value=''; document.getElementById('p_barcode').value=''; document.getElementById('p_nombre').value=''; document.getElementById('p_categoria').value=catActual!=='TODOS'?catActual:''; document.getElementById('p_precio').value=''; document.getElementById('p_stock').value=''; document.getElementById('p_compat').value=''; }
+function abrirModalProductoConCodigo(code, isBarcode=false){ abrirModalProducto(); if(isBarcode){ document.getElementById('p_barcode').value=code; } else { document.getElementById('p_codigo').value=code; document.getElementById('p_nombre').value=code; } }
 function cerrarModalProducto(){ document.getElementById('modalProducto').classList.add('hidden'); document.getElementById('modalProducto').classList.remove('flex'); }
 function editarProducto(p){ document.getElementById('modalProducto').classList.remove('hidden'); document.getElementById('modalProducto').classList.add('flex'); document.getElementById('p_id').value=p.id; document.getElementById('p_codigo').value=p.codigo; document.getElementById('p_barcode').value=p.barcode||''; document.getElementById('p_nombre').value=p.nombre; document.getElementById('p_categoria').value=p.categoria; document.getElementById('p_precio').value=p.precio; document.getElementById('p_stock').value=p.stock; document.getElementById('p_compat').value=p.compat||''; }
 function guardarProducto(){
   let idRaw = document.getElementById('p_id').value.trim();
-  let payload = { id: idRaw ? parseInt(idRaw) : null, codigo: document.getElementById('p_codigo').value.trim(), barcode: document.getElementById('p_barcode').value.trim(), nombre: document.getElementById('p_nombre').value.trim(), categoria: document.getElementById('p_categoria').value.trim() || 'OTRO', precio: parseFloat(document.getElementById('p_precio').value||0), stock: parseInt(document.getElementById('p_stock').value||0), compat: document.getElementById('p_compat').value.trim() };
+  let payload = { 
+    id: idRaw ? parseInt(idRaw) : null, 
+    codigo: document.getElementById('p_codigo').value.trim(), 
+    barcode: document.getElementById('p_barcode').value.trim(), 
+    nombre: document.getElementById('p_nombre').value.trim(), 
+    categoria: document.getElementById('p_categoria').value.trim() || 'OTRO', 
+    precio: parseFloat(document.getElementById('p_precio').value||0), 
+    stock: parseInt(document.getElementById('p_stock').value||0), 
+    compat: document.getElementById('p_compat').value.trim(), 
+  };
   if(!payload.codigo || !payload.nombre) return alert('Falta código y nombre');
-  fetch('/api/guardar_producto/', { method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken': getCSRF()}, body: JSON.stringify(payload) })
-  .then(async r=>{ let d=await r.json(); if(!r.ok||!d.ok) throw new Error(d.error||'Error'); return d; })
-  .then(d=>{ cerrarModalProducto(); cargarTodos(); }).catch(err=>{ alert(err.message); });
+  
+  fetch('/api/guardar_producto/', {
+    method:'POST', 
+    headers:{'Content-Type':'application/json','X-CSRFToken': getCSRF()}, 
+    body: JSON.stringify(payload)
+  })
+  .then(async r=>{
+    let d = await r.json();
+    if(!r.ok || !d.ok) throw new Error(d.error || 'Error al guardar');
+    return d;
+  })
+  .then(d=>{ cerrarModalProducto(); cargarTodos(); })
+  .catch(err=>{ alert(err.message); });
 }
-document.getElementById('busc').addEventListener('input', ()=>{ setTimeout(filtrarInstantaneo,100); });
-document.querySelectorAll('.cat-btn').forEach(btn=>{ btn.addEventListener('click', ()=>{ document.querySelectorAll('.cat-btn').forEach(b=>{ b.className='cat-btn bg-[#1e1e1e] border border-[#2a2a2a] text-zinc-400 hover:text-white px-4 py-1.5 rounded-full text-xs uppercase'; }); btn.className='cat-btn active bg-[#facc15] text-black font-bold px-4 py-1.5 rounded-full text-xs'; catActual=btn.dataset.cat; filtrarInstantaneo(); }); });
-document.getElementById('barcode_scanner').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); handleBarcodeScan(e.target.value); } });
+document.getElementById('busc').addEventListener('input', ()=>{ setTimeout(filtrarInstantaneo, 100); });
+document.querySelectorAll('.cat-btn').forEach(btn=>{ btn.addEventListener('click', ()=>{ document.querySelectorAll('.cat-btn').forEach(b=>{ b.className='cat-btn bg-[#1e1e1e] border border-[#2a2a2a] text-zinc-400 hover:text-white px-4 py-1.5 rounded-full text-xs uppercase'; }); btn.className='cat-btn active bg-[#facc15] text-black font-bold px-4 py-1.5 rounded-full text-xs'; catActual = btn.dataset.cat; filtrarInstantaneo(); }); });
+let scannerInput = document.getElementById('barcode_scanner');
+scannerInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); handleBarcodeScan(e.target.value); } });
 cargarTodos();
 </script>
 <div id="modalProducto" class="fixed inset-0 z-[100] bg-black/80 backdrop-blur hidden items-center justify-center p-4">

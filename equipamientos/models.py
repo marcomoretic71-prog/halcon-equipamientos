@@ -17,7 +17,7 @@ class Cliente(models.Model):
 
 class Producto(models.Model):
     codigo = models.CharField(max_length=50, unique=True, verbose_name="Código interno")
-    barcode = models.CharField(max_length=100, blank=True, null=True, unique=True, verbose_name="Código de Barras", help_text="EAN13 del producto - escanealo con el lector")
+    barcode = models.CharField(max_length=100, blank=True, null=True, unique=True, verbose_name="Código de Barras")
     nombre = models.CharField(max_length=250)
     categoria = models.CharField(max_length=50, default="OTRO")
     precio = models.DecimalField(max_digits=12, decimal_places=2)
@@ -52,7 +52,8 @@ class Presupuesto(models.Model):
 
 class ItemPresupuesto(models.Model):
     presupuesto = models.ForeignKey(Presupuesto, on_delete=models.CASCADE, related_name='items')
-    producto = models.ForeignKey(Producto, on_delete=models.CASCADE)
+    # FIX: PROTECT para no borrar historial de presupuestos al borrar producto
+    producto = models.ForeignKey(Producto, on_delete=models.PROTECT, related_name='items_presupuesto')
     cantidad = models.IntegerField(default=1)
     precio = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     precio_unitario = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -88,7 +89,8 @@ class Venta(models.Model):
 
 class ItemVenta(models.Model):
     venta = models.ForeignKey(Venta, on_delete=models.CASCADE, related_name='items')
-    producto = models.ForeignKey(Producto, on_delete=models.CASCADE)
+    # FIX: PROTECT para no borrar historial de ventas al borrar producto
+    producto = models.ForeignKey(Producto, on_delete=models.PROTECT, related_name='items_venta')
     cantidad = models.IntegerField(default=1)
     precio = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     def __str__(self): return f"{self.venta.codigo} - {self.producto.codigo} x{self.cantidad}"
@@ -102,7 +104,6 @@ class MovimientoCaja(models.Model):
     forma_pago = models.CharField(max_length=20, default='EFECTIVO')
     venta = models.ForeignKey('Venta', null=True, blank=True, on_delete=models.SET_NULL)
     nota = models.TextField(blank=True)
-
     def __str__(self):
         return f"{self.tipo} - {self.concepto} ${self.monto}"
 
@@ -119,10 +120,8 @@ class EmpresaCliente(models.Model):
     fecha_vencimiento = models.DateField(null=True, blank=True)
     precio_mensual = models.DecimalField(max_digits=10, decimal_places=2, default=15000)
     notas_privadas = models.TextField(blank=True)
-
     def __str__(self):
         return f"{self.nombre} - {'BLOQUEADO' if self.bloqueado else 'ACTIVO'}"
-
     @property
     def dias_restantes(self):
         if not self.fecha_vencimiento:
@@ -137,7 +136,6 @@ class RegistroAcceso(models.Model):
     accion = models.CharField(max_length=200)
     ip = models.GenericIPAddressField(null=True, blank=True)
     fecha = models.DateTimeField(auto_now_add=True)
-
     def __str__(self):
         return f"{self.fecha.strftime('%d/%m %H:%M')} - {self.usuario} - {self.accion}"
 
@@ -145,6 +143,5 @@ class ConfigSistema(models.Model):
     bloqueado_global = models.BooleanField(default=False)
     mensaje_bloqueo = models.CharField(max_length=300, default="Sistema en mantenimiento - Contactar a Halcon Sistemas 2983-512672")
     version = models.CharField(max_length=20, default="2.0 BRACCO")
-
     def __str__(self):
         return f"Config v{self.version} - {'BLOQUEADO' if self.bloqueado_global else 'OK'}"
