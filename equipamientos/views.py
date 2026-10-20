@@ -10,7 +10,7 @@ from django.contrib.auth.decorators import login_required
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
-from .models import Cliente, Producto, Presupuesto, ItemPresupuesto, ListaPrecio, ItemListaPrecio, Venta, ItemVenta, MovimientoCaja, AuditoriaAccion
+from .models import Cliente, Producto, Presupuesto, ItemPresupuesto, ListaPrecio, ItemListaPrecio, Venta, ItemVenta, MovimientoCaja
 
 DATOS_EMPRESA = {
     "whatsapp": "2983512672 / 3843400199",
@@ -23,132 +23,99 @@ DATOS_EMPRESA = {
     "footer": "¡Gracias por confiar en HALCÓN EQUIPAMIENTOS!"
 }
 
-def _get_ip(request):
-    try:
-        xff = request.META.get('HTTP_X_FORWARDED_FOR')
-        if xff:
-            return xff.split(',')[0].strip()
-        return request.META.get('REMOTE_ADDR')
-    except:
-        return None
+@login_required
+def dashboard(request): 
+    hoy = timezone.now()
+    hace_30 = hoy - timedelta(days=30)
+    ventas_qs = Venta.objects.select_related('cliente').order_by('-fecha_venta')
+    ventas_recientes = ventas_qs[:15]
+    presupuestos = Presupuesto.objects.select_related('cliente').order_by('-creado')[:10]
+    total_acum = ventas_qs.aggregate(Sum('total'))['total__sum'] or 0
+    total_mes = ventas_qs.filter(fecha_venta__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
+    count_mes = ventas_qs.filter(fecha_venta__gte=hace_30).count()
+    count_total = ventas_qs.count()
+    if count_total == 0:
+        total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
+        total_mes = Presupuesto.objects.filter(creado__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
+        count_mes = Presupuesto.objects.filter(creado__gte=hace_30).count()
+        count_total = Presupuesto.objects.count()
+    ticket_prom = total_acum / count_total if count_total else 0
+    top_productos = ItemPresupuesto.objects.values('producto__codigo','producto__nombre').annotate(veces=Count('id')).order_by('-veces')[:5]
+    stock_bajo = Producto.objects.filter(stock__lte=3).order_by('stock')[:10]
+    clientes_nuevos = Cliente.objects.order_by('-creado')[:5]
+    categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
+    ingresos_mes = MovimientoCaja.objects.filter(tipo='INGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
+    egresos_mes = MovimientoCaja.objects.filter(tipo='EGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
+    total_ingresos = MovimientoCaja.objects.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
+    total_egresos = MovimientoCaja.objects.filter(tipo='EGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
+    saldo_caja = total_ingresos - total_egresos
+    movimientos_caja = MovimientoCaja.objects.order_by('-fecha')[:10]
+    return render(request, 'dashboard.html', {
+        'total_acum': total_acum, 'total_mes': total_mes, 'count_mes': count_mes,
+        'count_total': count_total, 'ticket_prom': ticket_prom,
+        'presupuestos': presupuestos, 'ventas_recientes': ventas_recientes,
+        'top_productos': top_productos, 'stock_bajo': stock_bajo,
+        'clientes_nuevos': clientes_nuevos, 'categorias': categorias, 'datos': DATOS_EMPRESA,
+        'ingresos_mes': ingresos_mes, 'egresos_mes': egresos_mes,
+        'saldo_caja': saldo_caja, 'movimientos_caja': movimientos_caja
+    })
 
 @login_required
-def dashboard(request):
-    try:
-        hoy = timezone.now()
-        hace_30 = hoy - timedelta(days=30)
-        ventas_qs = Venta.objects.select_related('cliente').order_by('-fecha_venta')
-        ventas_recientes = list(ventas_qs[:15])
-        presupuestos = list(Presupuesto.objects.select_related('cliente').order_by('-creado')[:10])
-        total_acum = ventas_qs.aggregate(Sum('total'))['total__sum'] or 0
-        total_mes = ventas_qs.filter(fecha_venta__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
-        count_mes = ventas_qs.filter(fecha_venta__gte=hace_30).count()
-        count_total = ventas_qs.count()
-        if count_total == 0:
-            total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
-            total_mes = Presupuesto.objects.filter(creado__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
-            count_mes = Presupuesto.objects.filter(creado__gte=hace_30).count()
-            count_total = Presupuesto.objects.count()
-        ticket_prom = total_acum / count_total if count_total else 0
+def caja_view(request): 
+    mes_param = request.GET.get('mes','')
+    tipo_param = request.GET.get('tipo','')
+    movimientos = MovimientoCaja.objects.all().order_by('-fecha')
+    if tipo_param in ['INGRESO','EGRESO']:
+        movimientos = movimientos.filter(tipo=tipo_param)
+    if mes_param:
         try:
-            top_productos = list(ItemPresupuesto.objects.values('producto__codigo','producto__nombre').annotate(veces=Count('id')).order_by('-veces')[:5])
+            year, month = map(int, mes_param.split('-'))
+            movimientos = movimientos.filter(fecha__year=year, fecha__month=month)
         except:
-            top_productos = []
-        try:
-            stock_bajo = list(Producto.objects.filter(stock__lte=3).order_by('stock')[:10])
-        except Exception as e:
-            stock_bajo = []
-        try:
-            clientes_nuevos = list(Cliente.objects.order_by('-creado')[:5])
-        except:
-            clientes_nuevos = []
-        try:
-            categorias = list(Producto.objects.exclude(categoria__isnull=True).exclude(categoria='').values_list('categoria', flat=True).distinct().order_by('categoria'))
-        except:
-            categorias = []
-        try:
-            ingresos_mes = MovimientoCaja.objects.filter(tipo='INGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
-            egresos_mes = MovimientoCaja.objects.filter(tipo='EGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
-            total_ingresos = MovimientoCaja.objects.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
-            total_egresos = MovimientoCaja.objects.filter(tipo='EGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
-            saldo_caja = total_ingresos - total_egresos
-            movimientos_caja = list(MovimientoCaja.objects.order_by('-fecha')[:10])
-        except:
-            ingresos_mes = egresos_mes = total_ingresos = total_egresos = saldo_caja = 0
-            movimientos_caja = []
-        return render(request, 'dashboard.html', {
-            'total_acum': total_acum, 'total_mes': total_mes, 'count_mes': count_mes,
-            'count_total': count_total, 'ticket_prom': ticket_prom,
-            'presupuestos': presupuestos, 'ventas_recientes': ventas_recientes,
-            'top_productos': top_productos, 'stock_bajo': stock_bajo,
-            'clientes_nuevos': clientes_nuevos, 'categorias': categorias, 'datos': DATOS_EMPRESA,
-            'ingresos_mes': ingresos_mes, 'egresos_mes': egresos_mes,
-            'saldo_caja': saldo_caja, 'movimientos_caja': movimientos_caja
-        })
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return HttpResponse(f"<h1>Error Dashboard</h1><pre>{e}\n{traceback.format_exc()}</pre>", status=500)
-
-@login_required
-def caja_view(request):
-    try:
-        mes_param = request.GET.get('mes','')
-        tipo_param = request.GET.get('tipo','')
-        movimientos = MovimientoCaja.objects.all().order_by('-fecha')
-        if tipo_param in ['INGRESO','EGRESO']:
-            movimientos = movimientos.filter(tipo=tipo_param)
-        if mes_param:
-            try:
-                year, month = map(int, mes_param.split('-'))
-                movimientos = movimientos.filter(fecha__year=year, fecha__month=month)
-            except:
-                mes_param = ""
-        ingresos_filtrados = movimientos.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
-        egresos_filtrados = movimientos.filter(tipo='EGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
-        balance_filtrado = ingresos_filtrados - egresos_filtrados
-        count_ingresos = movimientos.filter(tipo='INGRESO').count()
-        count_egresos = movimientos.filter(tipo='EGRESO').count()
-        total_ing = MovimientoCaja.objects.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
-        total_egr = MovimientoCaja.objects.filter(tipo='EGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
-        saldo_actual = total_ing - total_egr
-        movimientos_list = list(movimientos.select_related('venta')[:200])
-        movimientos_rev = list(reversed(movimientos_list))
-        temp = 0
-        acum_map = {}
-        for m in movimientos_rev:
-            if m.tipo == 'INGRESO':
-                temp += float(m.monto)
-            else:
-                temp -= float(m.monto)
-            acum_map[m.id] = temp
-        for m in movimientos_list:
-            m.saldo_acum = acum_map.get(m.id, 0)
-        meses_qs = MovimientoCaja.objects.dates('fecha','month',order='DESC')
-        meses_disponibles = [{'value': d.strftime('%Y-%m'), 'label': d.strftime('%m/%Y')} for d in meses_qs]
-        if mes_param:
-            try:
-                y,m = map(int, mes_param.split('-'))
-                mes_label = datetime(y,m,1).strftime('%m/%Y')
-            except:
-                mes_label = "Filtrado"
+            mes_param = ""
+    ingresos_filtrados = movimientos.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
+    egresos_filtrados = movimientos.filter(tipo='EGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
+    balance_filtrado = ingresos_filtrados - egresos_filtrados
+    count_ingresos = movimientos.filter(tipo='INGRESO').count()
+    count_egresos = movimientos.filter(tipo='EGRESO').count()
+    total_ing = MovimientoCaja.objects.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
+    total_egr = MovimientoCaja.objects.filter(tipo='EGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
+    saldo_actual = total_ing - total_egr
+    movimientos_list = list(movimientos.select_related('venta')[:200])
+    movimientos_rev = list(reversed(movimientos_list))
+    temp = 0
+    acum_map = {}
+    for m in movimientos_rev:
+        if m.tipo == 'INGRESO':
+            temp += float(m.monto)
         else:
-            mes_label = "Mes Actual" if not tipo_param else tipo_param
-        return render(request, 'caja.html', {
-            'movimientos': movimientos_list,
-            'saldo_actual': saldo_actual,
-            'ingresos_filtrados': ingresos_filtrados,
-            'egresos_filtrados': egresos_filtrados,
-            'balance_filtrado': balance_filtrado,
-            'count_ingresos': count_ingresos,
-            'count_egresos': count_egresos,
-            'mes_label': mes_label,
-            'meses_disponibles': meses_disponibles,
-            'mes_seleccionado': mes_param,
-            'tipo_seleccionado': tipo_param,
-        })
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return HttpResponse(f"<h1>Error Caja</h1><pre>{e}</pre>", status=500)
+            temp -= float(m.monto)
+        acum_map[m.id] = temp
+    for m in movimientos_list:
+        m.saldo_acum = acum_map.get(m.id, 0)
+    meses_qs = MovimientoCaja.objects.dates('fecha','month',order='DESC')
+    meses_disponibles = [{'value': d.strftime('%Y-%m'), 'label': d.strftime('%m/%Y')} for d in meses_qs]
+    if mes_param:
+        try:
+            y,m = map(int, mes_param.split('-'))
+            mes_label = datetime(y,m,1).strftime('%m/%Y')
+        except:
+            mes_label = "Filtrado"
+    else:
+        mes_label = "Mes Actual" if not tipo_param else tipo_param
+    return render(request, 'caja.html', {
+        'movimientos': movimientos_list,
+        'saldo_actual': saldo_actual,
+        'ingresos_filtrados': ingresos_filtrados,
+        'egresos_filtrados': egresos_filtrados,
+        'balance_filtrado': balance_filtrado,
+        'count_ingresos': count_ingresos,
+        'count_egresos': count_egresos,
+        'mes_label': mes_label,
+        'meses_disponibles': meses_disponibles,
+        'mes_seleccionado': mes_param,
+        'tipo_seleccionado': tipo_param,
+    })
 
 @login_required
 @csrf_exempt
@@ -165,78 +132,52 @@ def api_caja_eliminar(request):
 
 @login_required
 def productos_view(request):
-    try:
-        categorias = list(Producto.objects.exclude(categoria__isnull=True).exclude(categoria='').values_list('categoria', flat=True).distinct().order_by('categoria'))
-    except:
-        categorias = []
-    try:
-        count_p = Producto.objects.count()
-    except:
-        count_p = 0
-    return render(request, 'productos.html', {'categorias': categorias, 'count_productos': count_p, 'datos': DATOS_EMPRESA})
+    categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
+    return render(request, 'productos.html', {'categorias': categorias, 'count_productos': Producto.objects.count(), 'datos': DATOS_EMPRESA})
 
 @login_required
 def listas_view(request):
-    try:
-        listas = list(ListaPrecio.objects.prefetch_related('items__producto').all().order_by('nombre'))
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        listas = list(ListaPrecio.objects.all().order_by('nombre'))
+    listas = ListaPrecio.objects.prefetch_related('items__producto').all().order_by('nombre')
     return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA})
 
 @login_required
 def presupuestos_view(request):
-    try:
-        presupuestos = list(Presupuesto.objects.select_related('cliente').prefetch_related('items__producto').order_by('-creado')[:100])
-        productos = list(Producto.objects.all().order_by('codigo'))
-        clientes = list(Cliente.objects.all().order_by('-creado')[:100])
-        listas = list(ListaPrecio.objects.all())
-        total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
-        return render(request, 'lista.html', {
-            'presupuestos': presupuestos, 'productos': productos,
-            'clientes': clientes, 'listas': listas,
-            'total_acumulado': total_acum, 'count': len(presupuestos),
-            'datos': DATOS_EMPRESA
-        })
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return HttpResponse(f"<h1>Error Presupuestos</h1><pre>{e}</pre>", status=500)
+    presupuestos = Presupuesto.objects.select_related('cliente').prefetch_related('items__producto').order_by('-creado')[:100]
+    productos = Producto.objects.all().order_by('codigo')
+    clientes = Cliente.objects.all().order_by('-creado')[:100]
+    listas = ListaPrecio.objects.all()
+    total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
+    return render(request, 'lista.html', {
+        'presupuestos': presupuestos, 'productos': productos,
+        'clientes': clientes, 'listas': listas,
+        'total_acumulado': total_acum, 'count': presupuestos.count(),
+        'datos': DATOS_EMPRESA
+    })
 
 @login_required
 def ventas_view(request):
-    try:
-        ventas = list(Venta.objects.select_related('cliente','presupuesto').order_by('-fecha_venta')[:200])
-        total_ventas = Venta.objects.aggregate(Sum('total'))['total__sum'] or 0
-        ventas_hoy = Venta.objects.filter(fecha_venta__date=timezone.now().date()).aggregate(Sum('total'))['total__sum'] or 0
-        count_ventas = Venta.objects.count()
-        ticket_promedio = total_ventas / count_ventas if count_ventas else 0
-        presupuestos = list(Presupuesto.objects.select_related('cliente').order_by('-creado')[:20])
-        total_efectivo = Venta.objects.filter(forma_pago='EFECTIVO').aggregate(Sum('total'))['total__sum'] or 0
-        total_transfer = Venta.objects.filter(forma_pago='TRANSFERENCIA').aggregate(Sum('total'))['total__sum'] or 0
-        total_tarjeta = total_ventas - total_efectivo - total_transfer
-        return render(request, 'ventas.html', {
-            'ventas': ventas, 'total_ventas': total_ventas, 'ventas_hoy': ventas_hoy,
-            'count_ventas': count_ventas, 'ticket_promedio': ticket_promedio,
-            'total_efectivo': total_efectivo, 'total_transfer': total_transfer,
-            'total_tarjeta': total_tarjeta, 'presupuestos': presupuestos, 'datos': DATOS_EMPRESA
-        })
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return HttpResponse(f"<h1>Error Ventas</h1><pre>{e}</pre>", status=500)
+    ventas = Venta.objects.select_related('cliente','presupuesto').order_by('-fecha_venta')[:200]
+    total_ventas = Venta.objects.aggregate(Sum('total'))['total__sum'] or 0
+    ventas_hoy = Venta.objects.filter(fecha_venta__date=timezone.now().date()).aggregate(Sum('total'))['total__sum'] or 0
+    count_ventas = Venta.objects.count()
+    ticket_promedio = total_ventas / count_ventas if count_ventas else 0
+    presupuestos = Presupuesto.objects.select_related('cliente').order_by('-creado')[:20]
+    total_efectivo = Venta.objects.filter(forma_pago='EFECTIVO').aggregate(Sum('total'))['total__sum'] or 0
+    total_transfer = Venta.objects.filter(forma_pago='TRANSFERENCIA').aggregate(Sum('total'))['total__sum'] or 0
+    total_tarjeta = total_ventas - total_efectivo - total_transfer
+    return render(request, 'ventas.html', {
+        'ventas': ventas, 'total_ventas': total_ventas, 'ventas_hoy': ventas_hoy,
+        'count_ventas': count_ventas, 'ticket_promedio': ticket_promedio,
+        'total_efectivo': total_efectivo, 'total_transfer': total_transfer,
+        'total_tarjeta': total_tarjeta, 'presupuestos': presupuestos, 'datos': DATOS_EMPRESA
+    })
 
 @login_required
 def api_buscar_productos(request):
     q = request.GET.get('q','').strip()
     cat = request.GET.get('cat','TODOS').strip().upper()
-    inactivos = request.GET.get('inactivos','0') == '1'
     try:
-        try:
-            if inactivos:
-                productos = Producto.objects.filter(es_activo=False)
-            else:
-                productos = Producto.objects.filter(es_activo=True)
-        except Exception:
-            productos = Producto.objects.all()
+        productos = Producto.objects.all()
         if cat != 'TODOS':
             productos = productos.filter(categoria__iexact=cat)
         if q:
@@ -246,16 +187,12 @@ def api_buscar_productos(request):
         for p in productos:
             data.append({
                 'id': p.id,
-                'codigo': getattr(p, 'codigo', ''),
-                'barcode': getattr(p, 'barcode', '') or '',
-                'nombre': getattr(p, 'nombre', ''),
-                'precio': float(p.precio) if getattr(p, 'precio', None) else 0,
-                'stock': getattr(p, 'stock', 0),
-                'categoria': getattr(p, 'categoria', 'OTRO') or 'OTRO',
-                'compat': getattr(p, 'nombre', ''),
-                'es_activo': getattr(p, 'es_activo', True),
-                'eliminado_en': p.eliminado_en.strftime('%d/%m %H:%M') if getattr(p, 'eliminado_en', None) else '',
-                'eliminado_por': getattr(p, 'eliminado_por', ''),
+                'codigo': p.codigo,
+                'barcode': p.barcode or '',
+                'nombre': p.nombre,
+                'precio': float(p.precio),
+                'stock': p.stock,
+                'categoria': p.categoria or 'OTRO',
             })
         return JsonResponse(data, safe=False)
     except Exception as e:
@@ -285,16 +222,8 @@ def api_guardar_producto(request):
         if prod_id: qs_codigo = qs_codigo.exclude(id=prod_id)
         if qs_codigo.exists():
             return JsonResponse({'ok': False, 'error': f'Ya existe {codigo}'})
-        barcode_val = str(d.get('barcode','')).strip() or None
-        if barcode_val and barcode_val.endswith('.0'): barcode_val = barcode_val[:-2]
-        if not barcode_val: barcode_val = None
-        if barcode_val:
-            qs_barcode = Producto.objects.filter(barcode=barcode_val)
-            if prod_id: qs_barcode = qs_barcode.exclude(id=prod_id)
-            if qs_barcode.exists():
-                return JsonResponse({'ok': False, 'error': f'Barcode {barcode_val} ya existe'})
         p.codigo = codigo
-        p.barcode = barcode_val
+        p.barcode = str(d.get('barcode','')).strip() or None
         p.nombre = nombre
         p.categoria = str(d.get('categoria','OTRO')).strip() or 'OTRO'
         try: p.precio = float(str(d.get('precio',0)).replace(',','.'))
@@ -414,9 +343,6 @@ def api_convertir_a_venta(request):
             venta.stock_descontado = True
             venta.save()
             MovimientoCaja.objects.create(tipo='INGRESO', concepto=f"Venta {codigo_venta} - {pres.cliente.nombre}", monto=venta.total, forma_pago=forma_pago, venta=venta)
-            try:
-                AuditoriaAccion.objects.create(usuario=request.user.username if request.user.is_authenticated else "sistema", accion='CREAR_VENTA', modelo='Venta', objeto_id=venta.codigo, detalle=f"Venta {codigo_venta} - {pres.cliente.nombre} ${venta.total}")
-            except: pass
             return JsonResponse({'ok': True, 'codigo_venta': codigo_venta})
         except Presupuesto.DoesNotExist:
             return JsonResponse({'ok': False, 'error': 'Presupuesto no encontrado'})
@@ -444,9 +370,6 @@ def api_venta_directa(request):
             prod.stock = max(0, prod.stock - int(it['cantidad']))
             prod.save()
         MovimientoCaja.objects.create(tipo='INGRESO', concepto=f"Venta Directa {codigo} - {cliente.nombre}", monto=venta.total, forma_pago=venta.forma_pago, venta=venta)
-        try:
-            AuditoriaAccion.objects.create(usuario=request.user.username if request.user.is_authenticated else "sistema", accion='CREAR_VENTA', modelo='Venta', objeto_id=venta.codigo, detalle=f"Directa {codigo} - {cliente.nombre} ${venta.total}")
-        except: pass
         return JsonResponse({'ok': True, 'codigo': codigo})
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -710,10 +633,6 @@ def api_importar_lista_excel(request):
                 if created: 
                     creados += 1
                 else:
-                    try:
-                        if not prod.es_activo:
-                            prod.reactivar()
-                    except: pass
                     prod.nombre = nombre
                     prod.precio = precio
                     if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
@@ -742,10 +661,6 @@ def api_importar_lista_excel(request):
             prod, _ = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': nombre_base})
             prod.nombre = nombre
             prod.precio = precio
-            try:
-                if not prod.es_activo:
-                    prod.reactivar()
-            except: pass
             if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
                 prod.categoria = nombre_base
             prod.save()
@@ -801,36 +716,17 @@ def api_eliminar_producto(request, producto_id):
         return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
     try:
         producto = Producto.objects.get(id=producto_id)
-        codigo = producto.codigo
+        # Si tiene ventas o presupuestos, no borrar, solo avisar
         tiene_ventas = ItemVenta.objects.filter(producto=producto).exists()
         tiene_presup = ItemPresupuesto.objects.filter(producto=producto).exists()
-        try:
-            producto.desactivar(usuario=request.user.username if request.user.is_authenticated else "admin")
-        except Exception as e:
-            producto.es_activo = False
-            producto.save()
-        try:
-            if tiene_ventas or tiene_presup:
-                AuditoriaAccion.objects.create(
-                    usuario=request.user.username if request.user.is_authenticated else "admin",
-                    accion='INTENTO_BORRAR_BLOQUEADO',
-                    modelo='Producto',
-                    objeto_id=str(producto.id),
-                    detalle=f"{codigo} - {producto.nombre} tenía {ItemVenta.objects.filter(producto=producto).count()} ventas / {ItemPresupuesto.objects.filter(producto=producto).count()} presup. DESACTIVADO (protegido).",
-                    ip=_get_ip(request)
-                )
-                return JsonResponse({'ok': True, 'codigo': codigo, 'desactivado': True, 'protegido': True, 'mensaje': f'🛡 {codigo} tenía ventas/presupuestos. No se borró, se DESACTIVÓ.'})
-            else:
-                AuditoriaAccion.objects.create(
-                    usuario=request.user.username if request.user.is_authenticated else "admin",
-                    accion='DESACTIVAR_PRODUCTO',
-                    modelo='Producto',
-                    objeto_id=str(producto.id),
-                    detalle=f"{codigo} - {producto.nombre} desactivado (sin historial)",
-                    ip=_get_ip(request)
-                )
-        except: pass
-        return JsonResponse({'ok': True, 'codigo': codigo, 'desactivado': True})
+        if tiene_ventas or tiene_presup:
+            return JsonResponse({'ok': False, 'error': f'No se puede borrar {producto.codigo} porque tiene ventas/presupuestos. Borra primero esos comprobantes.'})
+        # Si no tiene historial, borrar de verdad
+        codigo = producto.codigo
+        # Borrar items de listas primero
+        ItemListaPrecio.objects.filter(producto=producto).delete()
+        producto.delete()
+        return JsonResponse({'ok': True, 'codigo': codigo, 'borrado': True})
     except Producto.DoesNotExist:
         return JsonResponse({'ok': False, 'error': 'Producto no existe'})
     except Exception as e:
@@ -839,71 +735,27 @@ def api_eliminar_producto(request, producto_id):
 
 @login_required
 @csrf_exempt
-def api_producto_reactivar(request):
-    if request.method != 'POST':
-        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
-    try:
-        d = json.loads(request.body)
-        prod = Producto.objects.get(id=d.get('id'))
-        try:
-            prod.reactivar()
-        except:
-            prod.es_activo = True
-            prod.save()
-        try:
-            AuditoriaAccion.objects.create(
-                usuario=request.user.username if request.user.is_authenticated else "admin",
-                accion='REACTIVAR_PRODUCTO',
-                modelo='Producto',
-                objeto_id=str(prod.id),
-                detalle=f"Reactivado {prod.codigo} - {prod.nombre}",
-                ip=_get_ip(request)
-            )
-        except: pass
-        return JsonResponse({'ok': True, 'codigo': prod.codigo})
-    except Exception as e:
-        return JsonResponse({'ok': False, 'error': str(e)})
-
-@login_required
-@csrf_exempt
 def api_limpiar_duplicados_global(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
     try:
-        desactivados = 0
-        bloqueados_con_ventas = 0
+        borrados = 0
         for p in Producto.objects.filter(codigo__endswith='.0'):
             base = p.codigo[:-2]
             orig = Producto.objects.filter(codigo__iexact=base).exclude(id=p.id).first()
             if orig:
-                if ItemVenta.objects.filter(producto=p).exists() or ItemPresupuesto.objects.filter(producto=p).exists():
-                    try: p.desactivar(usuario="limpieza_duplicados")
-                    except: p.es_activo=False; p.save()
-                    desactivados += 1
-                    bloqueados_con_ventas += 1
-                else:
+                if not ItemVenta.objects.filter(producto=p).exists() and not ItemPresupuesto.objects.filter(producto=p).exists():
                     orig.stock = (orig.stock or 0) + (p.stock or 0)
                     orig.save()
                     ItemListaPrecio.objects.filter(producto=p).delete()
-                    try: p.desactivar(usuario="limpieza_duplicados")
-                    except: p.es_activo=False; p.save()
-                    desactivados += 1
+                    p.delete()
+                    borrados += 1
             else:
                 p.codigo = base
                 if getattr(p, 'barcode', '') and str(p.barcode).endswith('.0'):
                     p.barcode = str(p.barcode)[:-2]
                 p.save()
-        try:
-            AuditoriaAccion.objects.create(
-                usuario=request.user.username if request.user.is_authenticated else "admin",
-                accion='LIMPIAR_DUPLICADOS',
-                modelo='Producto',
-                objeto_id='batch',
-                detalle=f"Limpieza .0: {desactivados} desactivados, {bloqueados_con_ventas} con ventas protegidos",
-                ip=_get_ip(request)
-            )
-        except: pass
-        return JsonResponse({'ok': True, 'desactivados': desactivados, 'borrados': desactivados, 'bloqueados_con_ventas': bloqueados_con_ventas})
+        return JsonResponse({'ok': True, 'borrados': borrados})
     except Exception as e:
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
