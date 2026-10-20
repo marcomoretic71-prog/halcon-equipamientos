@@ -1,5 +1,9 @@
 from django.db import models
 
+class ProductoActivoManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(es_activo=True)
+
 class DatosEmpresa(models.Model):
     direccion = models.CharField(max_length=200, default="Ruta 89 Km. Quimili, SGO")
     whatsapp = models.CharField(max_length=100, default="2983512672 / 3843400199")
@@ -22,8 +26,29 @@ class Producto(models.Model):
     categoria = models.CharField(max_length=50, default="OTRO")
     precio = models.DecimalField(max_digits=12, decimal_places=2)
     stock = models.IntegerField(default=0)
+    # === BLINDAJE SOFT DELETE ===
+    es_activo = models.BooleanField(default=True, db_index=True, help_text="False = desactivado, no se borra nunca")
+    eliminado_en = models.DateTimeField(null=True, blank=True)
+    eliminado_por = models.CharField(max_length=100, blank=True, default="")
+
+    objects = models.Manager()
+    activos = ProductoActivoManager()
+
     def __str__(self):
-        return f"{self.nombre} ({self.codigo})"
+        return f"{self.nombre} ({self.codigo})" + ("" if self.es_activo else " [INACTIVO]")
+
+    def desactivar(self, usuario="sistema"):
+        from django.utils import timezone
+        self.es_activo = False
+        self.eliminado_en = timezone.now()
+        self.eliminado_por = usuario
+        self.save(update_fields=['es_activo','eliminado_en','eliminado_por'])
+
+    def reactivar(self):
+        self.es_activo = True
+        self.eliminado_en = None
+        self.eliminado_por = ""
+        self.save(update_fields=['es_activo','eliminado_en','eliminado_por'])
 
 class ListaPrecio(models.Model):
     nombre = models.CharField(max_length=100, unique=True)
@@ -34,7 +59,7 @@ class ListaPrecio(models.Model):
 
 class ItemListaPrecio(models.Model):
     lista = models.ForeignKey(ListaPrecio, on_delete=models.CASCADE, related_name='items')
-    producto = models.ForeignKey(Producto, on_delete=models.CASCADE)
+    producto = models.ForeignKey(Producto, on_delete=models.PROTECT)
     precio = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     precio_unitario = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     class Meta:
@@ -42,7 +67,7 @@ class ItemListaPrecio(models.Model):
 
 class Presupuesto(models.Model):
     codigo = models.CharField(max_length=20, unique=True)
-    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
+    cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT)
     vehiculo = models.CharField(max_length=100, blank=True)
     colocacion = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Mano de obra / Instalación")
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -52,7 +77,6 @@ class Presupuesto(models.Model):
 
 class ItemPresupuesto(models.Model):
     presupuesto = models.ForeignKey(Presupuesto, on_delete=models.CASCADE, related_name='items')
-    # FIX: PROTECT para no borrar historial de presupuestos al borrar producto
     producto = models.ForeignKey(Producto, on_delete=models.PROTECT, related_name='items_presupuesto')
     cantidad = models.IntegerField(default=1)
     precio = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -74,7 +98,7 @@ class Venta(models.Model):
     ]
     codigo = models.CharField(max_length=20, unique=True)
     presupuesto = models.OneToOneField(Presupuesto, on_delete=models.SET_NULL, null=True, blank=True, related_name='venta')
-    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
+    cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT)
     vehiculo = models.CharField(max_length=100, blank=True)
     colocacion = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Mano de obra / Instalación")
     total = models.DecimalField(max_digits=12, decimal_places=2)
@@ -89,7 +113,6 @@ class Venta(models.Model):
 
 class ItemVenta(models.Model):
     venta = models.ForeignKey(Venta, on_delete=models.CASCADE, related_name='items')
-    # FIX: PROTECT para no borrar historial de ventas al borrar producto
     producto = models.ForeignKey(Producto, on_delete=models.PROTECT, related_name='items_venta')
     cantidad = models.IntegerField(default=1)
     precio = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -106,6 +129,32 @@ class MovimientoCaja(models.Model):
     nota = models.TextField(blank=True)
     def __str__(self):
         return f"{self.tipo} - {self.concepto} ${self.monto}"
+
+# === NUEVO: AUDITORIA BLINDADA ===
+class AuditoriaAccion(models.Model):
+    TIPO_ACCION = [
+        ('DESACTIVAR_PRODUCTO', 'Desactivar Producto'),
+        ('REACTIVAR_PRODUCTO', 'Reactivar Producto'),
+        ('INTENTO_BORRAR_BLOQUEADO', 'Intento Bloqueado Borrar Producto con Ventas'),
+        ('LIMPIAR_DUPLICADOS', 'Limpiar Duplicados'),
+        ('CREAR_VENTA', 'Crear Venta'),
+        ('ELIMINAR_VENTA', 'Eliminar Venta'),
+        ('OTRO', 'Otro'),
+    ]
+    fecha = models.DateTimeField(auto_now_add=True, db_index=True)
+    usuario = models.CharField(max_length=150, default="sistema")
+    accion = models.CharField(max_length=30, choices=TIPO_ACCION)
+    modelo = models.CharField(max_length=50)
+    objeto_id = models.CharField(max_length=50)
+    detalle = models.TextField(blank=True)
+    ip = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-fecha']
+        verbose_name_plural = "Auditorias"
+
+    def __str__(self):
+        return f"{self.fecha.strftime('%d/%m %H:%M')} - {self.accion} - {self.detalle[:60]}"
 
 class EmpresaCliente(models.Model):
     nombre = models.CharField(max_length=200)
@@ -142,6 +191,6 @@ class RegistroAcceso(models.Model):
 class ConfigSistema(models.Model):
     bloqueado_global = models.BooleanField(default=False)
     mensaje_bloqueo = models.CharField(max_length=300, default="Sistema en mantenimiento - Contactar a Halcon Sistemas 2983-512672")
-    version = models.CharField(max_length=20, default="2.0 BRACCO")
+    version = models.CharField(max_length=20, default="2.1 BLINDADO")
     def __str__(self):
         return f"Config v{self.version} - {'BLOQUEADO' if self.bloqueado_global else 'OK'}"

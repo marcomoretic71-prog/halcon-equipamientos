@@ -10,7 +10,7 @@ from django.contrib.auth.decorators import login_required
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
-from .models import Cliente, Producto, Presupuesto, ItemPresupuesto, ListaPrecio, ItemListaPrecio, Venta, ItemVenta, MovimientoCaja
+from .models import Cliente, Producto, Presupuesto, ItemPresupuesto, ListaPrecio, ItemListaPrecio, Venta, ItemVenta, MovimientoCaja, AuditoriaAccion
 
 DATOS_EMPRESA = {
     "whatsapp": "2983512672 / 3843400199",
@@ -22,6 +22,12 @@ DATOS_EMPRESA = {
     "condiciones": "Se reserva con seña del 10%. Validez 15 días.",
     "footer": "¡Gracias por confiar en HALCÓN EQUIPAMIENTOS!"
 }
+
+def _get_ip(request):
+    xff = request.META.get('HTTP_X_FORWARDED_FOR')
+    if xff:
+        return xff.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
 
 @login_required
 def dashboard(request): 
@@ -41,9 +47,9 @@ def dashboard(request):
         count_total = Presupuesto.objects.count()
     ticket_prom = total_acum / count_total if count_total else 0
     top_productos = ItemPresupuesto.objects.values('producto__codigo','producto__nombre').annotate(veces=Count('id')).order_by('-veces')[:5]
-    stock_bajo = Producto.objects.filter(stock__lte=3).order_by('stock')[:10]
+    stock_bajo = Producto.activos.filter(stock__lte=3).order_by('stock')[:10]
     clientes_nuevos = Cliente.objects.order_by('-creado')[:5]
-    categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
+    categorias = Producto.activos.values_list('categoria', flat=True).distinct().order_by('categoria')
     ingresos_mes = MovimientoCaja.objects.filter(tipo='INGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
     egresos_mes = MovimientoCaja.objects.filter(tipo='EGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
     total_ingresos = MovimientoCaja.objects.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
@@ -132,8 +138,8 @@ def api_caja_eliminar(request):
 
 @login_required
 def productos_view(request):
-    categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
-    return render(request, 'productos.html', {'categorias': categorias, 'count_productos': Producto.objects.count(), 'datos': DATOS_EMPRESA})
+    categorias = Producto.activos.values_list('categoria', flat=True).distinct().order_by('categoria')
+    return render(request, 'productos.html', {'categorias': categorias, 'count_productos': Producto.activos.count(), 'datos': DATOS_EMPRESA})
 
 @login_required
 def listas_view(request):
@@ -143,7 +149,7 @@ def listas_view(request):
 @login_required
 def presupuestos_view(request):
     presupuestos = Presupuesto.objects.select_related('cliente').prefetch_related('items__producto').order_by('-creado')[:100]
-    productos = Producto.objects.all().order_by('codigo')
+    productos = Producto.activos.all().order_by('codigo')
     clientes = Cliente.objects.all().order_by('-creado')[:100]
     listas = ListaPrecio.objects.all()
     total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
@@ -176,8 +182,12 @@ def ventas_view(request):
 def api_buscar_productos(request):
     q = request.GET.get('q','').strip()
     cat = request.GET.get('cat','TODOS').strip().upper()
+    inactivos = request.GET.get('inactivos','0') == '1'
     try:
-        productos = Producto.objects.all()
+        if inactivos:
+            productos = Producto.objects.filter(es_activo=False)
+        else:
+            productos = Producto.activos.all()
         if cat != 'TODOS':
             productos = productos.filter(categoria__iexact=cat)
         if q:
@@ -186,7 +196,6 @@ def api_buscar_productos(request):
             if 'barcode' in field_names:
                 query |= Q(barcode__icontains=q)
             productos = productos.filter(query)
-        # FIX: Subido a 5000 para que traiga los 235 de EQUIPAMIENTO completos
         productos = productos.order_by('codigo')[:5000]
         data = []
         for p in productos:
@@ -194,9 +203,13 @@ def api_buscar_productos(request):
                 'id': p.id, 'codigo': p.codigo, 'barcode': getattr(p, 'barcode', '') or '',
                 'nombre': p.nombre, 'precio': float(p.precio) if p.precio else 0,
                 'stock': p.stock, 'categoria': getattr(p, 'categoria', 'OTRO') or 'OTRO', 'compat': p.nombre,
+                'es_activo': p.es_activo,
+                'eliminado_en': p.eliminado_en.strftime('%d/%m %H:%M') if p.eliminado_en else '',
+                'eliminado_por': p.eliminado_por,
             })
         return JsonResponse(data, safe=False)
     except Exception as e:
+        import traceback; traceback.print_exc()
         return JsonResponse([], safe=False)
 
 @login_required
@@ -343,7 +356,6 @@ def api_convertir_a_venta(request):
                 return JsonResponse({'ok': False, 'error': 'Este presupuesto ya es una venta'})
             codigo_venta = f"VEN-{uuid.uuid4().hex[:4].upper()}"
             venta = Venta.objects.create(codigo=codigo_venta, presupuesto=pres, cliente=pres.cliente, vehiculo=pres.vehiculo, colocacion=pres.colocacion, total=pres.total, forma_pago=forma_pago)
-            # FIX CRITICO: Crear ItemVenta para que la venta tenga historial completo y no se vacie si se borra un producto del presupuesto
             for item in pres.items.all():
                 prod = item.producto
                 ItemVenta.objects.create(
@@ -357,6 +369,7 @@ def api_convertir_a_venta(request):
             venta.stock_descontado = True
             venta.save()
             MovimientoCaja.objects.create(tipo='INGRESO', concepto=f"Venta {codigo_venta} - {pres.cliente.nombre}", monto=venta.total, forma_pago=forma_pago, venta=venta)
+            AuditoriaAccion.objects.create(usuario=request.user.username if request.user.is_authenticated else "sistema", accion='CREAR_VENTA', modelo='Venta', objeto_id=venta.codigo, detalle=f"Venta {codigo_venta} - {pres.cliente.nombre} ${venta.total}")
             return JsonResponse({'ok': True, 'codigo_venta': codigo_venta})
         except Presupuesto.DoesNotExist:
             return JsonResponse({'ok': False, 'error': 'Presupuesto no encontrado'})
@@ -384,8 +397,10 @@ def api_venta_directa(request):
             prod.stock = max(0, prod.stock - int(it['cantidad']))
             prod.save()
         MovimientoCaja.objects.create(tipo='INGRESO', concepto=f"Venta Directa {codigo} - {cliente.nombre}", monto=venta.total, forma_pago=venta.forma_pago, venta=venta)
+        AuditoriaAccion.objects.create(usuario=request.user.username if request.user.is_authenticated else "sistema", accion='CREAR_VENTA', modelo='Venta', objeto_id=venta.codigo, detalle=f"Directa {codigo} - {cliente.nombre} ${venta.total}")
         return JsonResponse({'ok': True, 'codigo': codigo})
     except Exception as e:
+        import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
 
 @login_required
@@ -646,6 +661,9 @@ def api_importar_lista_excel(request):
                 if created: 
                     creados += 1
                 else:
+                    # Si estaba desactivado, reactivar al importar
+                    if not prod.es_activo:
+                        prod.reactivar()
                     prod.nombre = nombre
                     prod.precio = precio
                     if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
@@ -674,6 +692,8 @@ def api_importar_lista_excel(request):
             prod, _ = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': nombre_base})
             prod.nombre = nombre
             prod.precio = precio
+            if not prod.es_activo:
+                prod.reactivar()
             if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
                 prod.categoria = nombre_base
             prod.save()
@@ -722,6 +742,7 @@ def api_cambiar_password(request):
             return JsonResponse({'ok': False, 'error': str(e)})
     return JsonResponse({'ok': False})
 
+# === BLINDAJE FINAL: DESACTIVAR EN VEZ DE BORRAR ===
 @login_required
 @csrf_exempt
 def api_eliminar_producto(request, producto_id):
@@ -731,16 +752,32 @@ def api_eliminar_producto(request, producto_id):
         producto = Producto.objects.get(id=producto_id)
         codigo = producto.codigo
         
-        # FIX CRITICO: No permitir borrar productos con historial de ventas/presupuestos
-        if ItemVenta.objects.filter(producto=producto).exists():
-            return JsonResponse({'ok': False, 'error': f'⛔ No se puede borrar {codigo}: tiene VENTAS registradas. El historial está protegido.'})
-        if ItemPresupuesto.objects.filter(producto=producto).exists():
-            return JsonResponse({'ok': False, 'error': f'⛔ No se puede borrar {codigo}: tiene PRESUPUESTOS registrados. El historial está protegido.'})
+        tiene_ventas = ItemVenta.objects.filter(producto=producto).exists()
+        tiene_presup = ItemPresupuesto.objects.filter(producto=producto).exists()
         
-        # Si no tiene historial, borrar solo de listas y luego el producto
-        ItemListaPrecio.objects.filter(producto=producto).delete()
-        producto.delete()
-        return JsonResponse({'ok': True, 'codigo': codigo})
+        # BLINDADO: Nunca borrar físico, solo desactivar
+        producto.desactivar(usuario=request.user.username if request.user.is_authenticated else "admin")
+        
+        if tiene_ventas or tiene_presup:
+            AuditoriaAccion.objects.create(
+                usuario=request.user.username if request.user.is_authenticated else "admin",
+                accion='INTENTO_BORRAR_BLOQUEADO',
+                modelo='Producto',
+                objeto_id=str(producto.id),
+                detalle=f"{codigo} - {producto.nombre} tenía {producto.items_venta.count()} ventas / {producto.items_presupuesto.count()} presup. DESACTIVADO (protegido).",
+                ip=_get_ip(request)
+            )
+            return JsonResponse({'ok': True, 'codigo': codigo, 'desactivado': True, 'protegido': True, 'mensaje': f'🛡️ {codigo} tenía ventas/presupuestos. No se borró, se DESACTIVÓ para no perder historial. Ventas intactas.'})
+        else:
+            AuditoriaAccion.objects.create(
+                usuario=request.user.username if request.user.is_authenticated else "admin",
+                accion='DESACTIVAR_PRODUCTO',
+                modelo='Producto',
+                objeto_id=str(producto.id),
+                detalle=f"{codigo} - {producto.nombre} desactivado (sin historial)",
+                ip=_get_ip(request)
+            )
+            return JsonResponse({'ok': True, 'codigo': codigo, 'desactivado': True})
     except Producto.DoesNotExist:
         return JsonResponse({'ok': False, 'error': 'Producto no existe'})
     except Exception as e:
@@ -749,29 +786,61 @@ def api_eliminar_producto(request, producto_id):
 
 @login_required
 @csrf_exempt
+def api_producto_reactivar(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        d = json.loads(request.body)
+        prod = Producto.objects.get(id=d.get('id'))
+        prod.reactivar()
+        AuditoriaAccion.objects.create(
+            usuario=request.user.username if request.user.is_authenticated else "admin",
+            accion='REACTIVAR_PRODUCTO',
+            modelo='Producto',
+            objeto_id=str(prod.id),
+            detalle=f"Reactivado {prod.codigo} - {prod.nombre}",
+            ip=_get_ip(request)
+        )
+        return JsonResponse({'ok': True, 'codigo': prod.codigo})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+@login_required
+@csrf_exempt
 def api_limpiar_duplicados_global(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
     try:
-        borrados = 0
-        # FIX: No borrar si tiene ventas/presupuestos
+        desactivados = 0
+        bloqueados_con_ventas = 0
         for p in Producto.objects.filter(codigo__endswith='.0'):
             base = p.codigo[:-2]
             orig = Producto.objects.filter(codigo__iexact=base).exclude(id=p.id).first()
             if orig:
                 if ItemVenta.objects.filter(producto=p).exists() or ItemPresupuesto.objects.filter(producto=p).exists():
-                    continue  # Saltar, tiene historial
-                orig.stock = (orig.stock or 0) + (p.stock or 0)
-                orig.save()
-                ItemListaPrecio.objects.filter(producto=p).delete()
-                p.delete()
-                borrados += 1
+                    p.desactivar(usuario="limpieza_duplicados")
+                    desactivados += 1
+                    bloqueados_con_ventas += 1
+                else:
+                    orig.stock = (orig.stock or 0) + (p.stock or 0)
+                    orig.save()
+                    ItemListaPrecio.objects.filter(producto=p).delete()
+                    p.desactivar(usuario="limpieza_duplicados")
+                    desactivados += 1
             else:
                 p.codigo = base
                 if getattr(p, 'barcode', '') and str(p.barcode).endswith('.0'):
                     p.barcode = str(p.barcode)[:-2]
                 p.save()
-        return JsonResponse({'ok': True, 'borrados': borrados})
+        AuditoriaAccion.objects.create(
+            usuario=request.user.username if request.user.is_authenticated else "admin",
+            accion='LIMPIAR_DUPLICADOS',
+            modelo='Producto',
+            objeto_id='batch',
+            detalle=f"Limpieza .0: {desactivados} desactivados, {bloqueados_con_ventas} con ventas protegidos",
+            ip=_get_ip(request)
+        )
+        return JsonResponse({'ok': True, 'desactivados': desactivados, 'borrados': desactivados, 'bloqueados_con_ventas': bloqueados_con_ventas})
     except Exception as e:
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
