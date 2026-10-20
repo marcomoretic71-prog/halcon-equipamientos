@@ -759,3 +759,9 @@ def api_limpiar_duplicados_global(request):
     except Exception as e:
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
+
+@login_required
+@csrf_exempt
+def api_producto_reactivar(request):
+    # Dummy - compatibilidad con urls viejo, no hace nada
+    return JsonResponse({'ok': False, 'error': 'Función desactivada en versión original'})
