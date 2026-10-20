@@ -563,7 +563,7 @@ def api_limpiar_duplicados_lista(request):
             return JsonResponse({'ok': False, 'error': str(e)})
     return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
 
-# === NUEVO: STOCK EDITABLE DESDE LISTAS ===
+# === FIX CATEGORIAS + STOCK ===
 @login_required
 @csrf_exempt
 def api_actualizar_stock(request):
@@ -587,6 +587,28 @@ def api_actualizar_stock(request):
 
 @login_required
 @csrf_exempt
+def api_sincronizar_categorias(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        actualizados = 0
+        for lista in ListaPrecio.objects.prefetch_related('items__producto').all():
+            nombre_base = lista.nombre.split(' - ')[0].strip().upper()
+            if not nombre_base or nombre_base == 'OTRO':
+                continue
+            for item in lista.items.select_related('producto').all():
+                prod = item.producto
+                if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
+                    prod.categoria = nombre_base
+                    prod.save()
+                    actualizados += 1
+        return JsonResponse({'ok': True, 'actualizados': actualizados})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+@login_required
+@csrf_exempt
 def api_importar_lista_excel(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
@@ -602,6 +624,8 @@ def api_importar_lista_excel(request):
                 lista, _ = ListaPrecio.objects.get_or_create(nombre__iexact=nombre_nueva, defaults={'nombre': nombre_nueva})
             else:
                 lista = ListaPrecio.objects.get(id=lista_id)
+            # FIX CATEGORIA: toma nombre base de la lista
+            nombre_base = lista.nombre.split(' - ')[0].strip().upper() or 'OTRO'
             creados = 0
             actualizados = 0
             for row in items:
@@ -611,21 +635,25 @@ def api_importar_lista_excel(request):
                 try: precio = float(row.get('precio',0) or 0)
                 except: precio = 0
                 if not codigo or precio <= 0: continue
-                prod, created = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': 'OTRO'})
-                if created: creados += 1
+                prod, created = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': nombre_base})
+                if created: 
+                    creados += 1
                 else:
                     prod.nombre = nombre
                     prod.precio = precio
+                    if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
+                        prod.categoria = nombre_base
                     prod.save()
                     actualizados += 1
                 ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
-            return JsonResponse({'ok': True, 'lista_nombre': lista.nombre, 'creados': creados, 'actualizados': actualizados, 'total_lista': lista.items.count()})
+            return JsonResponse({'ok': True, 'lista_nombre': lista.nombre, 'creados': creados, 'actualizados': actualizados, 'total_lista': lista.items.count(), 'categoria_usada': nombre_base})
         import openpyxl
         lista_id = request.POST.get('lista_id')
         archivo = request.FILES.get('archivo')
         if not lista_id or not archivo:
             return JsonResponse({'ok': False, 'error': 'Falta lista o archivo'})
         lista = ListaPrecio.objects.get(id=lista_id)
+        nombre_base = lista.nombre.split(' - ')[0].strip().upper() or 'OTRO'
         wb = openpyxl.load_workbook(archivo)
         ws = wb.active
         count = 0
@@ -636,13 +664,15 @@ def api_importar_lista_excel(request):
             nombre = str(row[1]).strip() if len(row) > 1 and row[1] else codigo
             precio = _limpiar_precio_br(row[2]) if len(row) > 2 else 0
             if precio <= 0: continue
-            prod, _ = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': 'OTRO'})
+            prod, _ = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': nombre_base})
             prod.nombre = nombre
             prod.precio = precio
+            if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
+                prod.categoria = nombre_base
             prod.save()
             ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
             count += 1
-        return JsonResponse({'ok': True, 'importados': count})
+        return JsonResponse({'ok': True, 'importados': count, 'categoria_usada': nombre_base})
     except Exception as e:
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})

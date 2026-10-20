@@ -14,6 +14,7 @@ urlpatterns = [
     path('api/eliminar_producto/<int:producto_id>/', views.api_eliminar_producto, name='api_eliminar_producto'),
     path('api/limpiar_duplicados_global/', views.api_limpiar_duplicados_global, name='api_limpiar_duplicados_global'),
     path('api/actualizar_stock/', views.api_actualizar_stock, name='api_actualizar_stock'),
+    path('api/sincronizar_categorias/', views.api_sincronizar_categorias, name='api_sincronizar_categorias'),
 
     # PRESUPUESTOS
     path('crear_presupuesto/', views.crear_presupuesto, name='crear_presupuesto'),
