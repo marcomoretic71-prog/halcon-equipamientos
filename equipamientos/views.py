@@ -47,9 +47,9 @@ def dashboard(request):
         count_total = Presupuesto.objects.count()
     ticket_prom = total_acum / count_total if count_total else 0
     top_productos = ItemPresupuesto.objects.values('producto__codigo','producto__nombre').annotate(veces=Count('id')).order_by('-veces')[:5]
-    stock_bajo = Producto.activos.filter(stock__lte=3).order_by('stock')[:10]
+    stock_bajo = Producto.objects.filter(stock__lte=3).order_by('stock')[:10]
     clientes_nuevos = Cliente.objects.order_by('-creado')[:5]
-    categorias = Producto.activos.values_list('categoria', flat=True).distinct().order_by('categoria')
+    categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
     ingresos_mes = MovimientoCaja.objects.filter(tipo='INGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
     egresos_mes = MovimientoCaja.objects.filter(tipo='EGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
     total_ingresos = MovimientoCaja.objects.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
@@ -138,8 +138,8 @@ def api_caja_eliminar(request):
 
 @login_required
 def productos_view(request):
-    categorias = Producto.activos.values_list('categoria', flat=True).distinct().order_by('categoria')
-    return render(request, 'productos.html', {'categorias': categorias, 'count_productos': Producto.activos.count(), 'datos': DATOS_EMPRESA})
+    categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
+    return render(request, 'productos.html', {'categorias': categorias, 'count_productos': Producto.objects.count(), 'datos': DATOS_EMPRESA})
 
 @login_required
 def listas_view(request):
@@ -149,7 +149,7 @@ def listas_view(request):
 @login_required
 def presupuestos_view(request):
     presupuestos = Presupuesto.objects.select_related('cliente').prefetch_related('items__producto').order_by('-creado')[:100]
-    productos = Producto.activos.all().order_by('codigo')
+    productos = Producto.objects.all().order_by('codigo')
     clientes = Cliente.objects.all().order_by('-creado')[:100]
     listas = ListaPrecio.objects.all()
     total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
@@ -184,28 +184,32 @@ def api_buscar_productos(request):
     cat = request.GET.get('cat','TODOS').strip().upper()
     inactivos = request.GET.get('inactivos','0') == '1'
     try:
-        if inactivos:
-            productos = Producto.objects.filter(es_activo=False)
-        else:
-            productos = Producto.activos.all()
+        try:
+            if inactivos:
+                productos = Producto.objects.filter(es_activo=False)
+            else:
+                productos = Producto.objects.filter(es_activo=True)
+        except Exception:
+            productos = Producto.objects.all()
         if cat != 'TODOS':
             productos = productos.filter(categoria__iexact=cat)
         if q:
-            field_names = [f.name for f in Producto._meta.get_fields() if hasattr(f, 'name')]
-            query = Q(codigo__icontains=q) | Q(nombre__icontains=q)
-            if 'barcode' in field_names:
-                query |= Q(barcode__icontains=q)
-            productos = productos.filter(query)
+            productos = productos.filter(Q(codigo__icontains=q) | Q(nombre__icontains=q) | Q(barcode__icontains=q))
         productos = productos.order_by('codigo')[:5000]
         data = []
         for p in productos:
             data.append({
-                'id': p.id, 'codigo': p.codigo, 'barcode': getattr(p, 'barcode', '') or '',
-                'nombre': p.nombre, 'precio': float(p.precio) if p.precio else 0,
-                'stock': p.stock, 'categoria': getattr(p, 'categoria', 'OTRO') or 'OTRO', 'compat': p.nombre,
-                'es_activo': p.es_activo,
-                'eliminado_en': p.eliminado_en.strftime('%d/%m %H:%M') if p.eliminado_en else '',
-                'eliminado_por': p.eliminado_por,
+                'id': p.id,
+                'codigo': getattr(p, 'codigo', ''),
+                'barcode': getattr(p, 'barcode', '') or '',
+                'nombre': getattr(p, 'nombre', ''),
+                'precio': float(p.precio) if getattr(p, 'precio', None) else 0,
+                'stock': getattr(p, 'stock', 0),
+                'categoria': getattr(p, 'categoria', 'OTRO') or 'OTRO',
+                'compat': getattr(p, 'nombre', ''),
+                'es_activo': getattr(p, 'es_activo', True),
+                'eliminado_en': p.eliminado_en.strftime('%d/%m %H:%M') if getattr(p, 'eliminado_en', None) else '',
+                'eliminado_por': getattr(p, 'eliminado_por', ''),
             })
         return JsonResponse(data, safe=False)
     except Exception as e:
