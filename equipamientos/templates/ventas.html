@@ -90,7 +90,7 @@ body{background:#0f0f0f;color:#e0e0e0;font-family:Inter,system-ui}.navbar{backgr
   </div>
 </div>
 
-<!-- MODAL VENTA DIRECTA - VERSION SIMPLE QUE SI CARGA -->
+<!-- MODAL VENTA DIRECTA - CON MANO DE OBRA -->
 <div id="modalVentaDirecta" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;padding:20px">
   <div class="modal-dark" style="width:100%;max-width:700px;max-height:90vh;overflow:auto;padding:24px">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -123,8 +123,25 @@ body{background:#0f0f0f;color:#e0e0e0;font-family:Inter,system-ui}.navbar{backgr
     </div>
 
     <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <label class="small" style="color:#FFD600;font-weight:800">🔧 Mano de obra / Instalación</label>
+        <input id="vd_colocacion" type="number" min="0" value="0" class="input-dark" style="border:2px solid #FFD600;background:#000;color:#FFD600;font-weight:900;font-size:16px" placeholder="Ej: 15000" oninput="renderCarritoDirecta()">
+        <small style="color:#888;font-size:10px">Varía según trabajo. Dejar en 0 si no hay instalación.</small>
+      </div>
       <div class="col-md-6"><label class="small text-secondary">Forma de Pago</label><select id="vd_pago" class="input-dark"><option value="EFECTIVO">💵 Efectivo</option><option value="TRANSFERENCIA">🏦 Transferencia</option><option value="TARJETA">💳 Tarjeta</option><option value="CUENTA_CORRIENTE">📒 Cuenta Corriente</option></select></div>
-      <div class="col-md-6"><label class="small text-secondary">Total</label><div id="vd_total" style="background:#FFD600;color:#000;border-radius:10px;padding:10px 12px;font-weight:900;font-size:18px">$ 0</div></div>
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <div style="background:#222;border-radius:10px;padding:10px 12px">
+          <small style="color:#888;font-size:10px">PRODUCTOS</small>
+          <div id="vd_subtotal" style="color:#aaa;font-weight:700;font-size:14px">$ 0</div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <label class="small text-secondary">Total Final</label>
+        <div id="vd_total" style="background:#FFD600;color:#000;border-radius:10px;padding:10px 12px;font-weight:900;font-size:18px">$ 0</div>
+      </div>
     </div>
     <button onclick="guardarVentaDirecta()" style="width:100%;background:#4ade80;color:#000;font-weight:900;border:none;border-radius:12px;padding:14px;font-size:15px">✅ CONFIRMAR VENTA</button>
   </div>
@@ -142,7 +159,6 @@ let carritoDirecta=[]; let totalDirecta=0;
 function abrirVentaDirecta(){ document.getElementById('modalVentaDirecta').style.display='flex'; setTimeout(()=>{ document.getElementById('vd_barcode').focus(); }, 300); }
 function cerrarVentaDirecta(){ document.getElementById('modalVentaDirecta').style.display='none'; }
 
-// VERSION SUPER SIMPLE QUE SI CARGA - BUSCA Y AGREGA EL PRIMERO QUE ENCUENTRA
 function venderPorBarcode(code){
   code = (code||'').toString().trim();
   if(!code) return;
@@ -152,12 +168,10 @@ function venderPorBarcode(code){
   fetch('/api/buscar_productos/?q='+encodeURIComponent(code)+'&cat=TODOS')
     .then(r=>r.json())
     .then(data=>{
-      console.log('Resultado API:', data);
       if(data && data.length>0){
-        // agarra el que coincida exacto por barcode o codigo, sino el primero
         let codeLower = code.toLowerCase();
         let prod = data.find(p => (p.barcode && p.barcode.toString().toLowerCase() === codeLower) || (p.codigo && p.codigo.toString().toLowerCase() === codeLower));
-        if(!prod) prod = data[0]; // si no hay exacto, agarra el primero que devolvió la búsqueda
+        if(!prod) prod = data[0];
         agregarProdDirecta(prod);
         document.getElementById('vd_last_scan').style.display='block';
         document.getElementById('vd_last_scan_detail').textContent = prod.codigo + ' - ' + prod.nombre.substring(0,40) + ' - $' + prod.precio;
@@ -201,13 +215,21 @@ function agregarProdDirecta(prod){
 }
 function renderCarritoDirecta(){
   let box=document.getElementById('vd_carrito');
-  if(carritoDirecta.length==0){ box.innerHTML='<small class="text-secondary">Carrito vacío</small>'; document.getElementById('vd_total').innerText='$ 0'; return; }
-  totalDirecta=0; let html='';
-  carritoDirecta.forEach((it, idx)=>{
-    let sub=it.precio*it.cantidad; totalDirecta+=sub;
-    html+=`<div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid #222"><div><b style="font-size:11px;font-family:monospace;color:#FFD600">${it.codigo}</b> <span style="font-size:12px">${it.nombre.substring(0,30)}</span><br><small style="color:#888">$${it.precio} x ${it.cantidad} = $${sub.toFixed(0)}</small></div><div class="d-flex gap-1"><button onclick="cambiarCantDirecta(${idx},-1)" style="width:26px;height:26px;border-radius:50%;background:#222;color:#fff;border:1px solid #333">-</button><span style="font-weight:700;margin:0 4px">${it.cantidad}</span><button onclick="cambiarCantDirecta(${idx},1)" style="width:26px;height:26px;border-radius:50%;background:#FFD600;color:#000;border:none;font-weight:800">+</button><button onclick="quitarDirecta(${idx})" style="background:transparent;color:#ef4444;border:none;margin-left:6px">✕</button></div></div>`;
-  });
-  box.innerHTML=html; document.getElementById('vd_total').innerText='$ '+totalDirecta.toLocaleString('es-AR',{minimumFractionDigits:2});
+  let subtotalProductos = 0;
+  let html = '';
+  if(carritoDirecta.length==0){
+    box.innerHTML='<small class="text-secondary">Carrito vacío</small>';
+  } else {
+    carritoDirecta.forEach((it, idx)=>{
+      let sub=it.precio*it.cantidad; subtotalProductos+=sub;
+      html+=`<div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid #222"><div><b style="font-size:11px;font-family:monospace;color:#FFD600">${it.codigo}</b> <span style="font-size:12px">${it.nombre.substring(0,30)}</span><br><small style="color:#888">$${it.precio} x ${it.cantidad} = $${sub.toFixed(0)}</small></div><div class="d-flex gap-1"><button onclick="cambiarCantDirecta(${idx},-1)" style="width:26px;height:26px;border-radius:50%;background:#222;color:#fff;border:1px solid #333">-</button><span style="font-weight:700;margin:0 4px">${it.cantidad}</span><button onclick="cambiarCantDirecta(${idx},1)" style="width:26px;height:26px;border-radius:50%;background:#FFD600;color:#000;border:none;font-weight:800">+</button><button onclick="quitarDirecta(${idx})" style="background:transparent;color:#ef4444;border:none;margin-left:6px">✕</button></div></div>`;
+    });
+    box.innerHTML=html;
+  }
+  let coloc = parseFloat(document.getElementById('vd_colocacion').value) || 0;
+  totalDirecta = subtotalProductos + coloc;
+  document.getElementById('vd_subtotal').innerText = '$ ' + subtotalProductos.toLocaleString('es-AR',{minimumFractionDigits:0}) + ' + $' + coloc.toLocaleString('es-AR',{minimumFractionDigits:0}) + ' inst.';
+  document.getElementById('vd_total').innerText='$ '+totalDirecta.toLocaleString('es-AR',{minimumFractionDigits:2});
 }
 function cambiarCantDirecta(idx, delta){ carritoDirecta[idx].cantidad+=delta; if(carritoDirecta[idx].cantidad<=0) carritoDirecta.splice(idx,1); renderCarritoDirecta(); }
 function quitarDirecta(idx){ carritoDirecta.splice(idx,1); renderCarritoDirecta(); }
@@ -215,12 +237,20 @@ function guardarVentaDirecta(){
   let cliente=document.getElementById('vd_cliente').value.trim();
   if(!cliente){ alert('Poné nombre del cliente'); return; }
   if(carritoDirecta.length==0){ alert('Agregá al menos un producto'); return; }
-  let data={cliente_nombre:cliente, telefono:document.getElementById('vd_telefono').value.trim(), vehiculo:document.getElementById('vd_vehiculo').value.trim(), forma_pago:document.getElementById('vd_pago').value, total:totalDirecta, items:carritoDirecta.map(i=>({id:i.id,cantidad:i.cantidad,precio:i.precio}))};
-  if(!confirm('¿Confirmar venta por $'+totalDirecta.toLocaleString('es-AR')+' a '+cliente+'?')) return;
+  let coloc = parseFloat(document.getElementById('vd_colocacion').value) || 0;
+  let data={
+    cliente_nombre:cliente, 
+    telefono:document.getElementById('vd_telefono').value.trim(), 
+    vehiculo:document.getElementById('vd_vehiculo').value.trim(), 
+    forma_pago:document.getElementById('vd_pago').value, 
+    colocacion: coloc,
+    total:totalDirecta, 
+    items:carritoDirecta.map(i=>({id:i.id,cantidad:i.cantidad,precio:i.precio}))
+  };
+  if(!confirm('¿Confirmar venta por $'+totalDirecta.toLocaleString('es-AR')+' a '+cliente+'? (Productos + $'+coloc+' instalación)')) return;
   fetch('/api/venta_directa/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r=>r.json()).then(d=>{ if(d.ok){ alert('✅ Venta '+d.codigo+' creada.'); location.reload(); } else alert('Error: '+d.error); });
 }
 
-// LECTOR: ENTER y también si el lector manda TAB
 document.getElementById('vd_barcode').addEventListener('keydown', function(e){
   if(e.key==='Enter'){
     e.preventDefault();

@@ -44,7 +44,7 @@ class Presupuesto(models.Model):
     codigo = models.CharField(max_length=20, unique=True)
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
     vehiculo = models.CharField(max_length=100, blank=True)
-    colocacion = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    colocacion = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Mano de obra / Instalación")
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     creado = models.DateTimeField(auto_now_add=True)
@@ -75,6 +75,7 @@ class Venta(models.Model):
     presupuesto = models.OneToOneField(Presupuesto, on_delete=models.SET_NULL, null=True, blank=True, related_name='venta')
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE)
     vehiculo = models.CharField(max_length=100, blank=True)
+    colocacion = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Mano de obra / Instalación")
     total = models.DecimalField(max_digits=12, decimal_places=2)
     forma_pago = models.CharField(max_length=20, choices=FORMA_PAGO_CHOICES, default='EFECTIVO')
     fecha_venta = models.DateTimeField(auto_now_add=True)
@@ -105,10 +106,9 @@ class MovimientoCaja(models.Model):
     def __str__(self):
         return f"{self.tipo} - {self.concepto} ${self.monto}"
 
-        # ==================== SISTEMA DE SUPERVISION SUPER ADMIN ====================
 class EmpresaCliente(models.Model):
-    nombre = models.CharField(max_length=200)  # Ej: Halcon Quimili - Sucursal 1
-    slug = models.SlugField(unique=True)  # quimili-central
+    nombre = models.CharField(max_length=200)
+    slug = models.SlugField(unique=True)
     contacto = models.CharField(max_length=200, blank=True)
     whatsapp = models.CharField(max_length=50, blank=True)
     activo = models.BooleanField(default=True)
@@ -118,7 +118,7 @@ class EmpresaCliente(models.Model):
     fecha_alta = models.DateTimeField(auto_now_add=True)
     fecha_vencimiento = models.DateField(null=True, blank=True)
     precio_mensual = models.DecimalField(max_digits=10, decimal_places=2, default=15000)
-    notas_privadas = models.TextField(blank=True)  # Solo vos ves esto
+    notas_privadas = models.TextField(blank=True)
 
     def __str__(self):
         return f"{self.nombre} - {'BLOQUEADO' if self.bloqueado else 'ACTIVO'}"
@@ -142,7 +142,6 @@ class RegistroAcceso(models.Model):
         return f"{self.fecha.strftime('%d/%m %H:%M')} - {self.usuario} - {self.accion}"
 
 class ConfigSistema(models.Model):
-    # Singleton - solo 1 registro
     bloqueado_global = models.BooleanField(default=False)
     mensaje_bloqueo = models.CharField(max_length=300, default="Sistema en mantenimiento - Contactar a Halcon Sistemas 2983-512672")
     version = models.CharField(max_length=20, default="2.0 BRACCO")

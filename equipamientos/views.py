@@ -402,7 +402,7 @@ def api_convertir_a_venta(request):
             if hasattr(pres, 'venta') and pres.venta is not None:
                 return JsonResponse({'ok': False, 'error': 'Este presupuesto ya es una venta'})
             codigo_venta = f"VEN-{uuid.uuid4().hex[:4].upper()}"
-            venta = Venta.objects.create(codigo=codigo_venta, presupuesto=pres, cliente=pres.cliente, vehiculo=pres.vehiculo, total=pres.total, forma_pago=forma_pago)
+            venta = Venta.objects.create(codigo=codigo_venta, presupuesto=pres, cliente=pres.cliente, vehiculo=pres.vehiculo, colocacion=pres.colocacion, total=pres.total, forma_pago=forma_pago)
             for item in pres.items.all():
                 prod = item.producto
                 prod.stock = max(0, prod.stock - item.cantidad)
@@ -429,7 +429,7 @@ def api_venta_directa(request):
             return JsonResponse({'ok': False, 'error': 'Falta cliente'})
         cliente, _ = Cliente.objects.get_or_create(nombre=cliente_nombre, defaults={'telefono': data.get('telefono',''), 'vehiculo_anio': data.get('vehiculo','')})
         codigo = f"VEN-{uuid.uuid4().hex[:4].upper()}"
-        venta = Venta.objects.create(codigo=codigo, cliente=cliente, vehiculo=data.get('vehiculo',''), total=data.get('total',0), forma_pago=data.get('forma_pago','EFECTIVO'), es_directa=True, stock_descontado=True)
+        venta = Venta.objects.create(codigo=codigo, cliente=cliente, vehiculo=data.get('vehiculo',''), colocacion=data.get('colocacion',0), total=data.get('total',0), forma_pago=data.get('forma_pago','EFECTIVO'), es_directa=True, stock_descontado=True)
         for it in data.get('items',[]):
             prod = Producto.objects.get(id=it['id'])
             ItemVenta.objects.create(venta=venta, producto=prod, cantidad=int(it['cantidad']), precio=float(it.get('precio', prod.precio)))
@@ -536,7 +536,7 @@ def pdf_presupuesto(request, codigo):
     p.drawRightString(460, y, "Subtotal:")
     p.drawRightString(560, y, f"${float(pres.subtotal):,.0f}")
     y -= 16
-    p.drawRightString(460, y, "Colocación:")
+    p.drawRightString(460, y, "Mano de obra / Instalación:")
     p.drawRightString(560, y, f"${float(pres.colocacion):,.0f}")
     y -= 26
     p.setFillColorRGB(1,0.84,0)
@@ -592,7 +592,6 @@ def _limpiar_precio_br(valor):
     except:
         return 0
 
-# ===== FUNCIONES NUEVAS - SIN DUPLICADOS =====
 @login_required
 @csrf_exempt
 def api_eliminar_item_lista(request):
@@ -637,7 +636,6 @@ def api_importar_lista_excel(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
     try:
-        # MODO NUEVO: JSON desde el modal
         if request.content_type == 'application/json':
             data = json.loads(request.body)
             items = data.get('items', [])
@@ -673,7 +671,6 @@ def api_importar_lista_excel(request):
                     actualizados += 1
                 ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
             return JsonResponse({'ok': True, 'lista_nombre': lista.nombre, 'creados': creados, 'actualizados': actualizados, 'total_lista': lista.items.count()})
-        # MODO VIEJO: archivo
         import openpyxl
         lista_id = request.POST.get('lista_id')
         archivo = request.FILES.get('archivo')
