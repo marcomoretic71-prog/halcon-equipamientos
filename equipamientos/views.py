@@ -24,7 +24,7 @@ DATOS_EMPRESA = {
 }
 
 @login_required
-def dashboard(request):
+def dashboard(request): 
     hoy = timezone.now()
     hace_30 = hoy - timedelta(days=30)
     ventas_qs = Venta.objects.select_related('cliente').order_by('-fecha_venta')
@@ -61,7 +61,7 @@ def dashboard(request):
     })
 
 @login_required
-def caja_view(request):
+def caja_view(request): 
     mes_param = request.GET.get('mes','')
     tipo_param = request.GET.get('tipo','')
     movimientos = MovimientoCaja.objects.all().order_by('-fecha')
@@ -185,33 +185,14 @@ def api_buscar_productos(request):
             query = Q(codigo__icontains=q) | Q(nombre__icontains=q)
             if 'barcode' in field_names:
                 query |= Q(barcode__icontains=q)
-            if 'compatibilidad' in field_names:
-                query |= Q(compatibilidad__icontains=q)
-            if 'compat' in field_names:
-                query |= Q(compat__icontains=q)
             productos = productos.filter(query)
         productos = productos.order_by('codigo')[:2000]
         data = []
         for p in productos:
-            compat_val = ""
-            try:
-                if hasattr(p, 'compatibilidad') and p.compatibilidad:
-                    compat_val = p.compatibilidad
-                elif hasattr(p, 'compat') and hasattr(p.compat, '__str__') and p.compat:
-                    compat_val = str(p.compat)
-                else:
-                    compat_val = p.nombre
-            except:
-                compat_val = p.nombre
             data.append({
-                'id': p.id,
-                'codigo': p.codigo,
-                'barcode': getattr(p, 'barcode', '') or '',
-                'nombre': p.nombre,
-                'precio': float(p.precio) if p.precio else 0,
-                'stock': p.stock,
-                'categoria': getattr(p, 'categoria', 'OTRO') or 'OTRO',
-                'compat': compat_val,
+                'id': p.id, 'codigo': p.codigo, 'barcode': getattr(p, 'barcode', '') or '',
+                'nombre': p.nombre, 'precio': float(p.precio) if p.precio else 0,
+                'stock': p.stock, 'categoria': getattr(p, 'categoria', 'OTRO') or 'OTRO', 'compat': p.nombre,
             })
         return JsonResponse(data, safe=False)
     except Exception as e:
@@ -228,63 +209,38 @@ def api_guardar_producto(request):
         if prod_id in ('', 0, '0', None):
             prod_id = None
         else:
-            try:
-                prod_id = int(prod_id)
-            except:
-                prod_id = None
+            try: prod_id = int(prod_id)
+            except: prod_id = None
         p = Producto.objects.get(id=prod_id) if prod_id else Producto()
         codigo = str(d.get('codigo','')).strip()
+        if codigo.endswith('.0'): codigo = codigo[:-2]
         nombre = str(d.get('nombre','')).strip()
         if not codigo or not nombre:
             return JsonResponse({'ok': False, 'error': 'Falta código y nombre'})
         qs_codigo = Producto.objects.filter(codigo__iexact=codigo)
-        if prod_id:
-            qs_codigo = qs_codigo.exclude(id=prod_id)
+        if prod_id: qs_codigo = qs_codigo.exclude(id=prod_id)
         if qs_codigo.exists():
-            return JsonResponse({'ok': False, 'error': f'Ya existe otro producto con código {codigo}'})
-        barcode_raw = d.get('barcode','')
-        barcode_val = str(barcode_raw).strip() if barcode_raw else ''
-        if not barcode_val:
-            barcode_val = None
+            return JsonResponse({'ok': False, 'error': f'Ya existe {codigo}'})
+        barcode_val = str(d.get('barcode','')).strip() or None
+        if barcode_val and barcode_val.endswith('.0'): barcode_val = barcode_val[:-2]
+        if not barcode_val: barcode_val = None
         if barcode_val:
             qs_barcode = Producto.objects.filter(barcode=barcode_val)
-            if prod_id:
-                qs_barcode = qs_barcode.exclude(id=prod_id)
+            if prod_id: qs_barcode = qs_barcode.exclude(id=prod_id)
             if qs_barcode.exists():
-                return JsonResponse({'ok': False, 'error': f'El código de barras {barcode_val} ya existe en otro producto'})
+                return JsonResponse({'ok': False, 'error': f'Barcode {barcode_val} ya existe'})
         p.codigo = codigo
         p.barcode = barcode_val
         p.nombre = nombre
         p.categoria = str(d.get('categoria','OTRO')).strip() or 'OTRO'
-        try:
-            p.precio = float(str(d.get('precio',0)).replace(',','.'))
-        except:
-            p.precio = 0
-        try:
-            p.stock = int(float(str(d.get('stock',0)).replace(',','.')))
-        except:
-            p.stock = 0
-        fields = [f.name for f in Producto._meta.get_fields() if hasattr(f, 'name')]
-        if 'compatibilidad' in fields:
-            try:
-                p.compatibilidad = d.get('compat','') or d.get('compatibilidad','') or nombre
-            except:
-                pass
-        if 'compat' in fields:
-            try:
-                from django.db.models import CharField, TextField
-                f = Producto._meta.get_field('compat')
-                if isinstance(f, (CharField, TextField)):
-                    p.compat = d.get('compat','') or d.get('compatibilidad','') or ''
-            except:
-                pass
+        try: p.precio = float(str(d.get('precio',0)).replace(',','.'))
+        except: p.precio = 0
+        try: p.stock = int(float(str(d.get('stock',0)).replace(',','.')))
+        except: p.stock = 0
         p.save()
         return JsonResponse({'ok': True, 'id': p.id})
-    except Producto.DoesNotExist:
-        return JsonResponse({'ok': False, 'error': 'Producto no encontrado'})
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
 
 @login_required
@@ -304,10 +260,7 @@ def crear_presupuesto(request):
             try:
                 ItemPresupuesto.objects.create(presupuesto=pres, producto=prod, cantidad=it['cantidad'], precio=precio_item, precio_unitario=precio_item)
             except TypeError:
-                try:
-                    ItemPresupuesto.objects.create(presupuesto=pres, producto=prod, cantidad=it['cantidad'], precio=precio_item)
-                except:
-                    ItemPresupuesto.objects.create(presupuesto=pres, producto=prod, cantidad=it['cantidad'], precio_unitario=precio_item)
+                ItemPresupuesto.objects.create(presupuesto=pres, producto=prod, cantidad=it['cantidad'], precio=precio_item)
         return JsonResponse({'ok': True, 'codigo': codigo})
     return JsonResponse({'ok': False})
 
@@ -321,20 +274,10 @@ def modificar_lista(request):
         if porcentaje == 0: return JsonResponse({'ok': False, 'error': 'Porcentaje 0'})
         factor = 1 + (porcentaje/100)
         for item in lista.items.select_related('producto').all():
-            precio_base = 0
-            try: precio_base = float(item.precio) if float(item.precio) > 0 else 0
-            except: pass
-            if precio_base <= 0:
-                try: precio_base = float(item.precio_unitario) if hasattr(item, 'precio_unitario') else 0
-                except: precio_base = 0
-            if precio_base <= 0: precio_base = float(item.producto.precio)
-            if precio_base <= 0: continue
+            precio_base = float(item.producto.precio)
             nuevo = round(precio_base * factor, 2)
-            try: item.precio = nuevo
-            except: pass
-            try:
-                if hasattr(item, 'precio_unitario'): item.precio_unitario = nuevo
-            except: pass
+            item.precio = nuevo
+            item.precio_unitario = nuevo
             item.save()
             item.producto.precio = nuevo
             item.producto.save()
@@ -347,15 +290,11 @@ def editar_precio_item_lista(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
-            item_id = data.get('item_id')
-            precio_raw = data.get('precio')
-            if precio_raw is None or str(precio_raw).strip() == "": return JsonResponse({'ok': False, 'error': 'precio vacío'})
-            nuevo = float(precio_raw)
+            item = ItemListaPrecio.objects.select_related('producto').get(id=data.get('item_id'))
+            nuevo = float(data.get('precio'))
             if nuevo <= 0: return JsonResponse({'ok': False, 'error': 'precio debe ser > 0'})
-            item = ItemListaPrecio.objects.select_related('producto').get(id=item_id)
-            try: item.precio = nuevo
-            except: pass
-            if hasattr(item, 'precio_unitario'): item.precio_unitario = nuevo
+            item.precio = nuevo
+            item.precio_unitario = nuevo
             item.save()
             item.producto.precio = nuevo
             item.producto.save()
@@ -577,20 +516,14 @@ def api_crear_lista(request):
     return JsonResponse({'ok': False, 'error': 'Método no permitido'})
 
 def _limpiar_precio_br(valor):
-    if valor is None:
-        return 0
+    if valor is None: return 0
     s = str(valor).strip()
-    if not s:
-        return 0
+    if not s: return 0
     s = s.replace("R$", "").replace("$", "").strip()
-    if "," in s and "." in s:
-        s = s.replace(".", "").replace(",", ".")
-    elif "," in s:
-        s = s.replace(",", ".")
-    try:
-        return float(s)
-    except:
-        return 0
+    if "," in s and "." in s: s = s.replace(".", "").replace(",", ".")
+    elif "," in s: s = s.replace(",", ".")
+    try: return float(s)
+    except: return 0
 
 @login_required
 @csrf_exempt
@@ -645,25 +578,19 @@ def api_importar_lista_excel(request):
                 if not nombre_nueva:
                     return JsonResponse({'ok': False, 'error': 'Falta nombre de lista'})
                 lista, _ = ListaPrecio.objects.get_or_create(nombre__iexact=nombre_nueva, defaults={'nombre': nombre_nueva})
-                if lista.nombre != nombre_nueva:
-                    lista.nombre = nombre_nueva
-                    lista.save()
             else:
                 lista = ListaPrecio.objects.get(id=lista_id)
             creados = 0
             actualizados = 0
             for row in items:
                 codigo = str(row.get('codigo','')).strip().upper()
+                if codigo.endswith('.0'): codigo = codigo[:-2]
                 nombre = str(row.get('nombre','')).strip() or codigo
-                try:
-                    precio = float(row.get('precio',0) or 0)
-                except:
-                    precio = 0
-                if not codigo or precio <= 0:
-                    continue
+                try: precio = float(row.get('precio',0) or 0)
+                except: precio = 0
+                if not codigo or precio <= 0: continue
                 prod, created = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': 'OTRO'})
-                if created:
-                    creados += 1
+                if created: creados += 1
                 else:
                     prod.nombre = nombre
                     prod.precio = precio
@@ -681,13 +608,12 @@ def api_importar_lista_excel(request):
         ws = wb.active
         count = 0
         for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row or not row[0]:
-                continue
+            if not row or not row[0]: continue
             codigo = str(row[0]).strip()
+            if codigo.endswith('.0'): codigo = codigo[:-2]
             nombre = str(row[1]).strip() if len(row) > 1 and row[1] else codigo
             precio = _limpiar_precio_br(row[2]) if len(row) > 2 else 0
-            if precio <= 0:
-                continue
+            if precio <= 0: continue
             prod, _ = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': 'OTRO'})
             prod.nombre = nombre
             prod.precio = precio
@@ -736,3 +662,44 @@ def api_cambiar_password(request):
         except Exception as e:
             return JsonResponse({'ok': False, 'error': str(e)})
     return JsonResponse({'ok': False})
+
+@login_required
+@csrf_exempt
+def api_eliminar_producto(request, producto_id):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        producto = Producto.objects.get(id=producto_id)
+        codigo = producto.codigo
+        producto.delete()
+        return JsonResponse({'ok': True, 'codigo': codigo})
+    except Producto.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Producto no existe'})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+@login_required
+@csrf_exempt
+def api_limpiar_duplicados_global(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        borrados = 0
+        for p in Producto.objects.filter(codigo__endswith='.0'):
+            base = p.codigo[:-2]
+            orig = Producto.objects.filter(codigo__iexact=base).exclude(id=p.id).first()
+            if orig:
+                orig.stock = (orig.stock or 0) + (p.stock or 0)
+                orig.save()
+                p.delete()
+                borrados += 1
+            else:
+                p.codigo = base
+                if getattr(p, 'barcode', '') and str(p.barcode).endswith('.0'):
+                    p.barcode = str(p.barcode)[:-2]
+                p.save()
+        return JsonResponse({'ok': True, 'borrados': borrados})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})

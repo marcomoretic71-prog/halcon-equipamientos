@@ -28,7 +28,7 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
   </div>
   <div class="flex gap-2">
     <a href="/caja/" class="hidden lg:flex bg-[#1a1a1a] border border-[#333] text-[#facc15] font-bold px-4 py-2 rounded-full text-xs">📒 Ver Caja</a>
-    <a href="/presupuesto/nuevo/" class="bg-[#facc15] text-black font-bold px-4 py-2 rounded-full text-sm">+ Nuevo Presupuesto</a>
+    <a href="/presupuestos/" class="bg-[#facc15] text-black font-bold px-4 py-2 rounded-full text-sm">+ Nuevo Presupuesto</a>
   </div>
 </nav>
 <div class="max-w-[1700px] mx-auto p-4 md:p-6">
@@ -154,6 +154,7 @@ function handleFile(file){
         let parts = r.split(';');
         if(parts.length<3) return;
         let codigo = parts[0].trim().toUpperCase();
+        if(codigo.endsWith('.0')) codigo = codigo.slice(0,-2);
         let nombre = parts[1].trim();
         let precioRaw = parts[2].trim();
         let precio = parseFloat(precioRaw.replace(/\./g,'').replace(',','.').replace(/[^0-9.-]/g,''))||0;
@@ -175,6 +176,7 @@ function handleFile(file){
       rows.slice(start).forEach(r=>{
         if(!r[0] && !r[1]) return;
         let codigo = String(r[0]||'').trim().toUpperCase();
+        if(codigo.endsWith('.0')) codigo = codigo.slice(0,-2);
         let nombre = String(r[1]||'').trim();
         let precioRaw = String(r[2]||'0');
         let precio = parseFloat(precioRaw.replace(/\$/g,'').replace(/\./g,'').replace(',','.').replace(/[^0-9.-]/g,''))||0;
@@ -248,7 +250,7 @@ async function aplicarPorcentaje(listaId){
 }
 function exportarLista(id){ window.location='/api/exportar_lista_excel/?lista_id='+id; }
 async function eliminarDeLista(item_id, codigo){
-  if(!confirm(`¿Eliminar ${codigo} de esta lista?\nNo borra el producto del sistema.`)) return;
+  if(!confirm(`¿Eliminar ${codigo} de esta lista?\n\nSolo lo saca de ESTA lista, no borra el producto del sistema.`)) return;
   const row = document.getElementById('row-'+item_id);
   if(row) row.style.opacity = '0.3';
   try{
