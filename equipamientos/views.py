@@ -563,6 +563,28 @@ def api_limpiar_duplicados_lista(request):
             return JsonResponse({'ok': False, 'error': str(e)})
     return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
 
+# === NUEVO: STOCK EDITABLE DESDE LISTAS ===
+@login_required
+@csrf_exempt
+def api_actualizar_stock(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        d = json.loads(request.body)
+        producto_id = d.get('producto_id')
+        stock = int(d.get('stock', 0))
+        if stock < 0:
+            stock = 0
+        prod = Producto.objects.get(id=producto_id)
+        prod.stock = stock
+        prod.save()
+        return JsonResponse({'ok': True, 'stock': prod.stock})
+    except Producto.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Producto no existe'})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})
+
 @login_required
 @csrf_exempt
 def api_importar_lista_excel(request):
@@ -636,9 +658,9 @@ def api_exportar_lista_excel(request):
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = lista.nombre[:30]
-        ws.append(["CODIGO", "NOMBRE", "PRECIO"])
+        ws.append(["CODIGO", "NOMBRE", "PRECIO", "STOCK"])
         for item in lista.items.select_related('producto').all():
-            ws.append([item.producto.codigo, item.producto.nombre, float(item.precio)])
+            ws.append([item.producto.codigo, item.producto.nombre, float(item.precio), item.producto.stock])
         bio = BytesIO()
         wb.save(bio)
         bio.seek(0)

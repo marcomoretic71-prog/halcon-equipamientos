@@ -8,18 +8,19 @@ urlpatterns = [
     path('listas/', views.listas_view, name='listas'),
     path('presupuestos/', views.presupuestos_view, name='presupuestos'),
     
-    # APIs PRODUCTOS - NO ROMPER NADA - solo agrega
+    # APIs PRODUCTOS
     path('api/buscar_productos/', views.api_buscar_productos, name='api_buscar_productos'),
     path('api/guardar_producto/', views.api_guardar_producto, name='api_guardar_producto'),
     path('api/eliminar_producto/<int:producto_id>/', views.api_eliminar_producto, name='api_eliminar_producto'),
     path('api/limpiar_duplicados_global/', views.api_limpiar_duplicados_global, name='api_limpiar_duplicados_global'),
+    path('api/actualizar_stock/', views.api_actualizar_stock, name='api_actualizar_stock'),
 
     # PRESUPUESTOS
     path('crear_presupuesto/', views.crear_presupuesto, name='crear_presupuesto'),
     path('modificar_lista/', views.modificar_lista, name='modificar_lista'),
     path('editar_precio_item_lista/', views.editar_precio_item_lista, name='editar_precio_item_lista'),
     
-    # PDF - ambas rutas
+    # PDF
     path('pdf/<str:codigo>/', views.pdf_presupuesto, name='pdf_presupuesto'),
     path('presupuesto/pdf/<str:codigo>/', views.pdf_presupuesto, name='pdf_presupuesto_alt'),
     path('presupuesto/nuevo/', views.presupuestos_view, name='presupuesto_nuevo'),
@@ -35,7 +36,7 @@ urlpatterns = [
     path('caja/', views.caja_view, name='caja'),
     path('api/caja_eliminar/', views.api_caja_eliminar, name='api_caja_eliminar'),
 
-    # LISTAS BRACCO - ESTAS YA LAS TENIAS, NO SE TOCAN
+    # LISTAS
     path('api/crear_lista/', views.api_crear_lista, name='api_crear_lista'),
     path('api/importar_lista_excel/', views.api_importar_lista_excel, name='api_importar_lista_excel'),
     path('api/exportar_lista_excel/', views.api_exportar_lista_excel, name='api_exportar_lista_excel'),
