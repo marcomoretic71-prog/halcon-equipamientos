@@ -1,205 +1,178 @@
-{% load formato %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Presupuestos - 【entity-HALCÓN¦canonical_name=HALCÓN】</title>
+<title>Presupuestos - HALCÓN EQUIPAMIENTOS</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<style>body{background:#0a0a0a;color:#e5e5e5}</style>
+<style>
+body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,system-ui}
+.scrollbar-none::-webkit-scrollbar{display:none}
+</style>
 </head>
 <body>
 <nav class="sticky top-0 z-50 bg-[#161616] border-b border-[#222] px-4 py-3 flex items-center justify-between">
   <div class="flex items-center gap-3">
     <img src="/static/logo_halcon_circular.png" style="width:62px;height:62px;border-radius:50%;border:2px solid #ff8c00;object-fit:cover">
-    <div style="line-height:1"><b style="font-size:20px;letter-spacing:1px;color:#e0e0e0">【entity-HALCÓN¦canonical_name=HALCÓN】</b><br><span style="font-size:13px;color:#ff8c00;font-weight:700;letter-spacing:1px">EQUIPAMIENTOS</span></div>
-    <div class="flex bg-[#1c1c1c] rounded-full p-1 gap-1 items-center ml-6 overflow-x-auto max-w- scrollbar-none">
-      <a href="/" class="px-4 py-2 rounded-full text-sm text-zinc-400 hover:text-white whitespace-nowrap">🏠 Inicio</a>
-      <a href="/productos/" class="px-4 py-2 rounded-full text-sm text-zinc-400 hover:text-white whitespace-nowrap">📦 Productos</a>
-      <a href="/listas/" class="px-4 py-2 rounded-full text-sm text-zinc-400 hover:text-white whitespace-nowrap">💲 Listas</a>
-      <a href="/presupuestos/" class="px-4 py-2 rounded-full text-sm bg-[#facc15] text-black font-bold whitespace-nowrap">📄 Presupuestos</a>
-      <a href="/ventas/" class="px-4 py-2 rounded-full text-sm bg-[#22c55e]/20 text-[#4ade80] border border-[#22c55e]/30 font-bold whitespace-nowrap">💰 Ventas</a>
-      <a href="/caja/" class="px-4 py-2 rounded-full text-sm bg-[#facc15]/20 text-[#facc15] border border-[#facc15]/30 font-bold whitespace-nowrap">📒 CAJA</a>
+    <div style="line-height:1"><b style="font-size:20px;letter-spacing:1px;color:#e0e0e0">HALCÓN</b><br><span style="font-size:13px;color:#ff8c00;font-weight:700;letter-spacing:1px">EQUIPAMIENTOS</span></div>
+    <div class="hidden md:flex bg-[#1a1a1a] rounded-full p-1 gap-1 items-center ml-6">
+      <a href="/" class="px-4 py-2 rounded-full text-sm text-zinc-400">🏠 Inicio</a>
+      <a href="/productos/" class="px-4 py-2 rounded-full text-sm text-zinc-400">📦 Productos</a>
+      <a href="/listas/" class="px-4 py-2 rounded-full text-sm text-zinc-400">$ Listas</a>
+      <a href="/presupuestos/" class="px-4 py-2 rounded-full text-sm bg-[#facc15] text-black font-bold">📄 Presupuestos</a>
+      <a href="/ventas/" class="px-4 py-2 rounded-full text-sm bg-[#22c55e]/20 text-[#4ade80] border border-[#22c55e]/30 font-bold">💰 Ventas</a>
+      <a href="/caja/" class="px-4 py-2 rounded-full text-sm bg-[#facc15]/20 text-[#facc15] border border-[#facc15]/30 font-bold">📒 CAJA</a>
     </div>
   </div>
-  <div class="flex items-center gap-2">
-    <a href="/caja/" class="hidden lg:flex bg-[#1a1a1a] border border-[#333] text-[#facc15] font-bold px-4 py-2.5 rounded-full text-xs">📒 Ver Caja</a>
-    <a href="/productos/" class="bg-[#facc15] text-black font-bold px-5 py-2.5 rounded-full text-sm">Ir a Productos</a>
+  <div class="flex gap-2">
+    <a href="/productos/" class="bg-[#facc15] text-black font-bold px-5 py-2 rounded-full text-sm">Ir a Productos</a>
   </div>
 </nav>
-
-<div class="max-w- mx-auto p-4">
-  <div class="bg-[#151515] border border-[#262626] rounded- p-4 md:p-5">
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="font-bold text-">Crear Presupuesto Rápido</h2>
-    </div>
-
-    <form id="form-pres-principal" class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4" onsubmit="return false;">
-      <input id="input-cliente" placeholder="Cliente *" class="w-full bg-[#0a0a0a] border border-[#333] rounded-full px-4 py-2.5 text-sm outline-none focus:border-[#facc15]" required>
-      <input id="input-vehiculo" placeholder="Vehículo / Año" class="w-full bg-[#0a0a0a] border border-[#333] rounded-full px-4 py-2.5 text-sm outline-none focus:border-[#facc15]">
-      <input id="input-tel" placeholder="Tel / WhatsApp" class="w-full bg-[#0a0a0a] border border-[#333] rounded-full px-4 py-2.5 text-sm outline-none focus:border-[#facc15]">
-      <select id="input-forma" class="w-full bg-[#0a0a0a] border border-[#333] rounded-full px-4 py-2.5 text-sm outline-none focus:border-[#facc15]">
-        <option value="EFECTIVO">💵 Efectivo</option>
-        <option value="TRANSFERENCIA">🏦 Transferencia</option>
-        <option value="TARJETA">💳 Tarjeta</option>
-        <option value="CUENTA_CORRIENTE">📒 Cta.Cte</option>
+<div class="max-w-[1600px] mx-auto p-4">
+  <div class="bg-[#151515] border border-[#262626] rounded-[16px] p-5">
+    <h2 class="font-bold text-sm mb-4">Crear Presupuesto Rápido</h2>
+    
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+      <input id="cliente" placeholder="Cliente *" class="bg-[#0a0a0a] border border-[#2a2a2a] rounded-full px-4 py-3 text-sm outline-none focus:border-[#facc15]">
+      <input id="vehiculo" placeholder="Vehículo / Año" class="bg-[#0a0a0a] border border-[#2a2a2a] rounded-full px-4 py-3 text-sm outline-none focus:border-[#facc15]">
+      <input id="telefono" placeholder="Tel / WhatsApp" class="bg-[#0a0a0a] border border-[#2a2a2a] rounded-full px-4 py-3 text-sm outline-none focus:border-[#facc15]">
+      <select id="forma_pago" class="bg-[#0a0a0a] border border-[#2a2a2a] rounded-full px-4 py-3 text-sm outline-none">
+        <option>💵 Efectivo</option>
+        <option>💳 Transferencia</option>
+        <option>💳 Tarjeta</option>
       </select>
-    </form>
-
+    </div>
     <div class="relative mb-4">
-      <input id="busc-prod" placeholder="🔍 Buscar producto por código o nombre... ej: BAE-6, AMAROK, BATERIA" class="w-full bg-[#1e1e1e] border-2 border-[#2a2a2a] rounded-full px-5 py-3.5 text-sm outline-none focus:border-yellow-400 placeholder:text-zinc-600">
-      <div id="result-prod" class="absolute z-20 w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded- mt-2 max-h- overflow-auto hidden"></div>
+      <input id="buscador" autocomplete="off" placeholder="🔍 Buscar producto por código o nombre... ej: BAE-6, AMAROK, BATERIA" class="w-full bg-[#0a0a0a] border-2 border-[#2a2a2a] rounded-full px-5 py-3.5 text-sm outline-none focus:border-[#facc15] placeholder:text-zinc-600">
+      <div id="resultados" class="absolute z-20 w-full mt-2 bg-[#1a1a1a] border border-[#333] rounded-[12px] hidden max-h-[300px] overflow-auto"></div>
     </div>
-
-    <div id="carrito" class="space-y-2 min-h- border-2 border-dashed border-[#2a2a2a] rounded- p-4">
-      <div class="text-center py-4"><div class="text-sm text-zinc-400">Sin productos aún</div><div class="text- text-zinc-600 mt-1">Buscá arriba y tocá para agregar</div></div>
+    <div id="carrito" class="border border-dashed border-[#2a2a2a] rounded-[12px] p-6 text-center mb-6">
+      <div class="text-sm text-zinc-400">Sin productos aún</div>
+      <div class="text-xs text-zinc-600 mt-1">Buscá arriba y tocá para agregar</div>
     </div>
-
-    <!-- BLOQUE NUEVO MANO DE OBRA -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-5 bg-[#0f0f0f] border border-[#262626] rounded- p-4">
-      <div class="md:col-span-2">
-        <label class="text- text-[#facc15] uppercase tracking-widest font-bold">🔧 Mano de obra / Instalación</label>
-        <div class="flex items-center gap-2 mt-1">
+    <div class="bg-[#0f0f0f] border border-[#262626] rounded-[12px] p-4 flex flex-col md:flex-row gap-4">
+      <div class="flex-1">
+        <label class="text-[12px] font-black text-[#facc15] tracking-widest flex items-center gap-2">🔧 MANO DE OBRA / INSTALACIÓN</label>
+        <div class="flex items-center gap-2 mt-2">
           <span class="text-zinc-500">$</span>
-          <input id="input-colocacion" type="number" min="0" step="500" value="0" placeholder="0 - Dejar en 0 si no hay instalación" class="w-full bg-[#000] border-2 border-[#facc15] rounded-full px-4 py-2.5 text-sm outline-none focus:border-yellow-300 text-[#facc15] font-bold">
+          <input id="colocacion" type="number" value="0" class="flex-1 bg-black border-2 border-[#facc15] rounded-full px-5 py-3 text-sm font-black text-[#facc15] outline-none">
         </div>
-        <div class="text- text-zinc-500 mt-1">Este monto varía según el trabajo. Se suma al total y aparece en el PDF como "Mano de obra / Instalación".</div>
+        <div class="text-[11px] text-zinc-500 mt-2">Este monto varía según el trabajo. Se suma al total y aparece en el PDF como "Mano de obra / Instalación".</div>
       </div>
-      <div class="bg-[#1a1a1a] rounded- p-3 text-sm">
-        <div class="flex justify-between text-zinc-400"><span>Subtotal productos</span><span id="subtotal-label">$ 0</span></div>
-        <div class="flex justify-between text-zinc-400 mt-1"><span>+ Instalación</span><span id="colocacion-label" class="text-[#facc15]">$ 0</span></div>
-        <div class="border-t border-[#2a2a2a] mt-2 pt-2 flex justify-between font-bold text-white"><span>Total Final</span><span id="total-pres" class="text-[#facc15]">$ 0,00</span></div>
+      <div class="w-full md:w-[300px] bg-[#151515] rounded-[8px] p-4 text-sm">
+        <div class="flex justify-between text-zinc-400"><span>Subtotal productos</span><span id="subtotal">$ 0</span></div>
+        <div class="flex justify-between text-zinc-400 mt-1"><span>+ Instalación</span><span id="instalacion_txt" class="text-[#facc15]">$ 0</span></div>
+        <div class="flex justify-between font-black mt-3 pt-3 border-t border-[#222]"><span>Total Final</span><span id="total_final" class="text-[#facc15]">$ 0,00</span></div>
       </div>
     </div>
-
-    <div class="flex flex-col md:flex-row justify-between items-center gap-4 mt-6 pt-4 border-t border-[#222]">
-      <div class="text- text-zinc-500">📍 Ruta 89 Km. Quimili, SGO • 📱 2983512672 / 3843400199 • 📷 @halcon_equipamientos</div>
-      <div class="flex items-center gap-4">
-        <button onclick="generarPDF()" class="bg-[#facc15] text-black font-black px-8 py-3 rounded-full hover:bg-yellow-300 transition text-sm">Crear y Generar PDF</button>
-      </div>
+    <div class="flex justify-between items-center mt-6 pt-4 border-t border-[#222]">
+      <div class="text-[12px] text-zinc-500">📍 Ruta 89 Km. Quimili, SGO • 📠 2983512672 / 3843400199 • 📷 @halcon_equipamientos</div>
+      <button onclick="crearPresupuesto()" class="bg-[#facc15] text-black font-black px-8 py-3 rounded-full text-sm hover:bg-yellow-300">Crear y Generar PDF</button>
     </div>
   </div>
-
-  <div class="bg-[#151515] border border-[#262626] rounded- p-5 mt-6">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="font-bold text-">📄 Presupuestos - {{ presupuestos|length }} emitidos</h2>
-      <div class="text-xs text-zinc-500">Total acumulado: <span class="text-white font-bold">$ {{ total_acumulado|ars }}</span></div>
+  <div class="bg-[#151515] border border-[#262626] rounded-[16px] p-5 mt-6">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="font-bold text-sm">📄 Presupuestos - {{ count }} emitidos</h3>
+      <span class="text-[11px] text-zinc-500">Total acumulado: $ {{ total_acumulado|floatformat:0 }}</span>
     </div>
-    <div class="bg-[#1a1a1a] rounded- overflow-hidden overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="text- text-zinc-500 uppercase tracking-widest border-b border-[#2a2a2a]">
-          <tr><th class="text-left p-3">COD</th><th class="text-left p-3">CLIENTE</th><th class="text-left p-3">VEHICULO</th><th class="text-left p-3">FECHA</th><th class="text-right p-3">TOTAL</th><th class="text-center p-3">PDF</th></tr>
+    <div class="overflow-auto">
+      <table class="w-full text-[11px]">
+        <thead class="text-[10px] text-zinc-500 uppercase border-b border-[#222]">
+          <tr><th class="text-left p-2">COD</th><th class="text-left p-2">CLIENTE</th><th class="text-left p-2">VEHICULO</th><th class="text-left p-2">FECHA</th><th class="text-right p-2">TOTAL</th><th class="text-right p-2">PDF</th></tr>
         </thead>
-        <tbody class="divide-y divide-[#222]">
-          {% for pres in presupuestos %}
-          <tr class="hover:bg-[#222]">
-            <td class="p-3 font-mono text-xs text-zinc-400">{{ pres.codigo }}</td>
-            <td class="p-3 font-medium">{{ pres.cliente.nombre }}</td>
-            <td class="p-3 text-zinc-400">{{ pres.vehiculo }}</td>
-            <td class="p-3 text-zinc-500 text-xs">{{ pres.creado|date:"d/m H:i" }}</td>
-            <td class="p-3 text-right font-bold">{{ pres.total|ars }}</td>
-            <td class="p-3 text-center"><a href="/presupuesto/pdf/{{ pres.codigo }}/" class="bg-[#facc15] text-black px-3 py-1 rounded-full text-xs font-bold">PDF</a></td>
+        <tbody class="divide-y divide-[#1e1e1e]">
+          {% for p in presupuestos %}
+          <tr class="hover:bg-[#1e1e1e]/50">
+            <td class="p-2 font-mono text-zinc-400">{{ p.codigo }}</td>
+            <td class="p-2">{{ p.cliente.nombre }}</td>
+            <td class="p-2 text-zinc-500">{{ p.vehiculo }}</td>
+            <td class="p-2 text-zinc-500">{{ p.creado|date:"d/m/Y" }}</td>
+            <td class="p-2 text-right font-bold text-[#facc15]">${{ p.total|floatformat:0 }}</td>
+            <td class="p-2 text-right"><a href="/pdf/{{ p.codigo }}/" class="bg-white text-black px-3 py-1 rounded-full text-[10px] font-bold">PDF</a></td>
           </tr>
           {% empty %}
-          <tr><td colspan="6" class="p-10 text-center text-zinc-500">Aún no hay presupuestos.</td></tr>
+          <tr><td colspan="6" class="p-8 text-center text-zinc-500">Aún no hay presupuestos.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 </div>
-
 <script>
-let carrito = [];
-let subtotalProductos = 0;
-function formatARS(n){ return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS', minimumFractionDigits:0}).format(n); }
-function getCSRF(){ const m=document.cookie.match(/csrftoken=([^;]+)/); return m?m[1]:''; }
-
-let timeoutBusc;
-document.getElementById('busc-prod').addEventListener('input', e=>{
-  clearTimeout(timeoutBusc);
-  let q = e.target.value.trim();
-  if(q.length<2){ document.getElementById('result-prod').classList.add('hidden'); return; }
-  timeoutBusc = setTimeout(()=>{
-    fetch(`/api/buscar_productos/?q=${encodeURIComponent(q)}`).then(r=>r.json()).then(data=>{
-        let div = document.getElementById('result-prod');
-        div.innerHTML = '';
-        data.slice(0,8).forEach(p=>{
-          let row = document.createElement('div');
-          row.className='p-3 hover:bg-[#222] cursor-pointer flex justify-between text- border-b border-[#222]';
-          row.innerHTML=`<span>${p.codigo} - ${p.nombre}</span><span class="font-bold text-[#facc15]">${formatARS(p.precio)}</span>`;
-          row.onclick=()=>addProducto(p);
-          div.appendChild(row);
-        });
-        div.classList.remove('hidden');
-      });
-  },300);
-});
-
-function addProducto(p){ carrito.push({...p, cant:1}); renderCarrito(); document.getElementById('result-prod').classList.add('hidden'); document.getElementById('busc-prod').value=''; }
-
+let carrito = JSON.parse(localStorage.getItem('halcon_carrito')||'[]');
+let todosProductos = [];
+async function cargarProductos(){
+  let res = await fetch('/api/buscar_productos/?q=&cat=TODOS');
+  todosProductos = await res.json();
+}
+cargarProductos();
+function formatARS(n){ return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS'}).format(n||0); }
 function renderCarrito(){
-  let cont = document.getElementById('carrito');
-  subtotalProductos = 0;
-  if(carrito.length===0){ cont.innerHTML='<div class="text-center py-4"><div class="text-sm text-zinc-400">Sin productos aún</div><div class="text- text-zinc-600 mt-1">Buscá arriba y tocá para agregar</div></div>'; }
-  else {
-    cont.innerHTML=''; 
-    carrito.forEach((item,idx)=>{
-      subtotalProductos+= item.precio * item.cant;
-      let div=document.createElement('div');
-      div.className='bg-[#0f0f0f] border border-[#222] rounded- p-2.5 flex justify-between items-center text-';
-      div.innerHTML=`<div class="flex-1 truncate pr-2"><div class="font-medium truncate">${item.nombre}</div><div class="text- text-zinc-500">${item.codigo} - ${formatARS(item.precio)}</div></div><div class="flex items-center gap-2"><div class="flex items-center gap-1 bg-[#1a1a1a] rounded-full px-2 py-1"><button onclick="carrito[${idx}].cant=Math.max(1,carrito[${idx}].cant-1);renderCarrito()" class="w-5 h-5 rounded-full bg-[#222]">-</button><span class="text-xs px-2">${item.cant}</span><button onclick="carrito[${idx}].cant++;renderCarrito()" class="w-5 h-5 rounded-full bg-[#222]">+</button></div><button onclick="carrito.splice(${idx},1);renderCarrito()" class="w-6 h-6 rounded-full bg-[#222] text-zinc-400">x</button></div>`;
-      cont.appendChild(div);
-    });
+  let div = document.getElementById('carrito');
+  if(carrito.length===0){
+    div.innerHTML = `<div class="text-sm text-zinc-400">Sin productos aún</div><div class="text-xs text-zinc-600 mt-1">Buscá arriba y tocá para agregar</div>`;
+    actualizarTotales();
+    return;
   }
+  let html = `<div class="text-left divide-y divide-[#222]">`;
+  carrito.forEach((it, idx)=>{
+    html += `<div class="flex justify-between items-center py-2"><div><b class="text-xs">${it.codigo}</b> - <span class="text-xs">${it.nombre}</span> x${it.cant}</div><div class="flex gap-2 items-center"><span class="text-xs font-bold text-[#facc15]">${formatARS(it.precio*it.cant)}</span><button onclick="quitar(${idx})" class="w-6 h-6 rounded-full bg-[#222] text-red-400">✕</button></div></div>`;
+  });
+  html += `</div>`;
+  div.innerHTML = html;
   actualizarTotales();
 }
-
 function actualizarTotales(){
-  let colocacion = parseFloat(document.getElementById('input-colocacion').value) || 0;
-  let totalFinal = subtotalProductos + colocacion;
-  document.getElementById('subtotal-label').textContent = formatARS(subtotalProductos);
-  document.getElementById('colocacion-label').textContent = formatARS(colocacion);
-  document.getElementById('total-pres').textContent = formatARS(totalFinal);
+  let sub = carrito.reduce((s,it)=>s+it.precio*it.cant,0);
+  let inst = parseFloat(document.getElementById('colocacion').value||0);
+  document.getElementById('subtotal').textContent = formatARS(sub);
+  document.getElementById('instalacion_txt').textContent = formatARS(inst);
+  document.getElementById('total_final').textContent = formatARS(sub+inst);
 }
-
-document.getElementById('input-colocacion').addEventListener('input', actualizarTotales);
-
-async function generarPDF(){ 
-  let cliente=document.getElementById('input-cliente').value.trim(); 
-  if(!cliente){ alert('Poné el cliente'); return; } 
-  if(carrito.length===0){ alert('Agregá al menos un producto'); return; } 
-
-  let colocacion = parseFloat(document.getElementById('input-colocacion').value) || 0;
-  let subtotal = subtotalProductos;
-  let totalFinal = subtotal + colocacion;
-
+function quitar(idx){ carrito.splice(idx,1); localStorage.setItem('halcon_carrito', JSON.stringify(carrito)); renderCarrito(); }
+document.getElementById('colocacion').addEventListener('input', actualizarTotales);
+document.getElementById('buscador').addEventListener('input', (e)=>{
+  let q = e.target.value.toLowerCase();
+  let resDiv = document.getElementById('resultados');
+  if(q.length<2){ resDiv.classList.add('hidden'); return; }
+  let filtrados = todosProductos.filter(p=> p.codigo.toLowerCase().includes(q) || p.nombre.toLowerCase().includes(q)).slice(0,10);
+  if(filtrados.length===0){ resDiv.classList.add('hidden'); return; }
+  resDiv.innerHTML = filtrados.map(p=>`<div onclick="agregar(${p.id})" class="p-3 hover:bg-[#222] cursor-pointer flex justify-between"><span><b class="font-mono text-xs text-zinc-500">${p.codigo}</b> ${p.nombre}</span><span class="text-xs text-[#facc15] font-bold">${formatARS(p.precio)}</span></div>`).join('');
+  resDiv.classList.remove('hidden');
+});
+function agregar(id){
+  let p = todosProductos.find(x=>x.id===id);
+  if(!p) return;
+  let ex = carrito.find(c=>c.id===id);
+  if(ex) ex.cant++; else carrito.push({id:p.id,codigo:p.codigo,nombre:p.nombre,precio:p.precio,cant:1});
+  localStorage.setItem('halcon_carrito', JSON.stringify(carrito));
+  document.getElementById('buscador').value='';
+  document.getElementById('resultados').classList.add('hidden');
+  renderCarrito();
+}
+async function crearPresupuesto(){
+  let cliente = document.getElementById('cliente').value.trim();
+  if(!cliente) return alert('Falta cliente');
+  if(carrito.length===0) return alert('Agregá productos');
+  let subtotal = carrito.reduce((s,it)=>s+it.precio*it.cant,0);
+  let colocacion = parseFloat(document.getElementById('colocacion').value||0);
   let payload = {
-    cliente_nombre: document.getElementById('input-cliente').value,
-    vehiculo: document.getElementById('input-vehiculo').value,
-    telefono: document.getElementById('input-tel').value,
-    subtotal: subtotal,
+    cliente_nombre: cliente,
+    vehiculo: document.getElementById('vehiculo').value,
+    telefono: document.getElementById('telefono').value,
     colocacion: colocacion,
-    total: totalFinal,
-    items: carrito.map(c=>({ id: c.id, cantidad: c.cant, precio: c.precio, precio_unitario: c.precio }))
+    subtotal: subtotal,
+    total: subtotal+colocacion,
+    items: carrito.map(c=>({id:c.id,cantidad:c.cant,precio:c.precio}))
   };
-
-  try{
-    let res = await fetch('/api/crear_presupuesto/', {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'X-CSRFToken': getCSRF() },
-      body: JSON.stringify(payload)
-    });
-    let data = await res.json();
-    if(data.ok){
-      window.location.href = `/presupuesto/pdf/${data.codigo}/`;
-    } else {
-      alert('Error: ' + (data.error || 'No se pudo crear'));
-    }
-  } catch(e){
-    alert('Error: ' + e);
-  }
+  let res = await fetch('/crear_presupuesto/', {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'}, body: JSON.stringify(payload)});
+  let data = await res.json();
+  if(data.ok){
+    localStorage.removeItem('halcon_carrito');
+    window.location.href = '/pdf/'+data.codigo+'/';
+  } else alert('Error');
 }
+renderCarrito();
 </script>
 </body>
 </html>
