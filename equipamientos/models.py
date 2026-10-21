@@ -22,7 +22,6 @@ class Producto(models.Model):
     categoria = models.CharField(max_length=50, default="OTRO")
     precio = models.DecimalField(max_digits=12, decimal_places=2)
     stock = models.IntegerField(default=0)
-    es_activo = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.nombre} ({self.codigo})"
