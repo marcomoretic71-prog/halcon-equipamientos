@@ -176,8 +176,13 @@ def ventas_view(request):
 def api_buscar_productos(request):
     q = request.GET.get('q','').strip()
     cat = request.GET.get('cat','TODOS').strip().upper()
+    inactivos = request.GET.get('inactivos','0') == '1'
     try:
         productos = Producto.objects.all()
+        if inactivos:
+            productos = productos.filter(es_activo=False)
+        else:
+            productos = productos.filter(es_activo=True)
         if cat != 'TODOS':
             productos = productos.filter(categoria__iexact=cat)
         if q:
@@ -193,11 +198,13 @@ def api_buscar_productos(request):
                 'precio': float(p.precio),
                 'stock': p.stock,
                 'categoria': p.categoria or 'OTRO',
+                'es_activo': p.es_activo,
             })
         return JsonResponse(data, safe=False)
     except Exception as e:
         import traceback; traceback.print_exc()
         return JsonResponse([], safe=False)
+
 
 @login_required
 @csrf_exempt
@@ -716,14 +723,13 @@ def api_eliminar_producto(request, producto_id):
         return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
     try:
         producto = Producto.objects.get(id=producto_id)
-        # Si tiene ventas o presupuestos, no borrar, solo avisar
         tiene_ventas = ItemVenta.objects.filter(producto=producto).exists()
         tiene_presup = ItemPresupuesto.objects.filter(producto=producto).exists()
-        if tiene_ventas or tiene_presup:
-            return JsonResponse({'ok': False, 'error': f'No se puede borrar {producto.codigo} porque tiene ventas/presupuestos. Borra primero esos comprobantes.'})
-        # Si no tiene historial, borrar de verdad
         codigo = producto.codigo
-        # Borrar items de listas primero
+        if tiene_ventas or tiene_presup:
+            producto.es_activo = False
+            producto.save()
+            return JsonResponse({'ok': True, 'codigo': codigo, 'desactivado': True, 'mensaje': f'{codigo} desactivado, ventas protegidas'})
         ItemListaPrecio.objects.filter(producto=producto).delete()
         producto.delete()
         return JsonResponse({'ok': True, 'codigo': codigo, 'borrado': True})
@@ -733,35 +739,54 @@ def api_eliminar_producto(request, producto_id):
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
 
+
 @login_required
 @csrf_exempt
 def api_limpiar_duplicados_global(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
     try:
+        desactivados = 0
         borrados = 0
+        bloqueados_con_ventas = 0
         for p in Producto.objects.filter(codigo__endswith='.0'):
             base = p.codigo[:-2]
             orig = Producto.objects.filter(codigo__iexact=base).exclude(id=p.id).first()
             if orig:
-                if not ItemVenta.objects.filter(producto=p).exists() and not ItemPresupuesto.objects.filter(producto=p).exists():
+                if ItemVenta.objects.filter(producto=p).exists() or ItemPresupuesto.objects.filter(producto=p).exists():
+                    p.es_activo = False
+                    p.save()
+                    bloqueados_con_ventas += 1
+                else:
                     orig.stock = (orig.stock or 0) + (p.stock or 0)
                     orig.save()
                     ItemListaPrecio.objects.filter(producto=p).delete()
                     p.delete()
                     borrados += 1
+                    desactivados += 1
             else:
                 p.codigo = base
                 if getattr(p, 'barcode', '') and str(p.barcode).endswith('.0'):
                     p.barcode = str(p.barcode)[:-2]
                 p.save()
-        return JsonResponse({'ok': True, 'borrados': borrados})
+        return JsonResponse({'ok': True, 'desactivados': desactivados, 'borrados': borrados, 'bloqueados_con_ventas': bloqueados_con_ventas})
     except Exception as e:
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
 
+
 @login_required
 @csrf_exempt
 def api_producto_reactivar(request):
-    # Dummy - compatibilidad con urls viejo, no hace nada
-    return JsonResponse({'ok': False, 'error': 'Función desactivada en versión original'})
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        d = json.loads(request.body)
+        pid = d.get('id')
+        prod = Producto.objects.get(id=pid)
+        prod.es_activo = True
+        prod.save()
+        return JsonResponse({'ok': True, 'codigo': prod.codigo})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)})
+
