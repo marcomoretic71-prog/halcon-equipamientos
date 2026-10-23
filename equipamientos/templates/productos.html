@@ -165,10 +165,19 @@ function renderAcordeones(data){
                       <button onclick="cambiarStockProducto(${p.id}, 1)" class="w-7 h-7 rounded-full bg-[#222] border border-[#333] text-white hover:bg-[#333] font-bold flex items-center justify-center">+</button>
                     </div>
                   </td>
-                  <td class="p-3 text-right"><span class="font-bold text-[#facc15]">${formatARS(p.precio)}</span></td>
+                  <td class="p-3 text-right">
+                    <div class="flex items-center justify-end gap-1">
+                      <span class="text-[10px] text-zinc-500 hidden md:block">$</span>
+                      <input id="precio-${p.id}" type="text" value="${p.precio}" 
+                        onkeydown="if(event.key==='Enter'){ guardarPrecioDirecto(${p.id}); this.blur(); }" 
+                        onblur="guardarPrecioDirecto(${p.id})"
+                        class="precio-input bg-[#0f0f0f] border border-[#333] rounded-lg px-2 py-1.5 w-[115px] text-right outline-none focus:border-[#facc15] font-bold text-[#facc15] text-[12px]">
+                    </div>
+                    <div id="precio-status-${p.id}" class="text-[9px] text-green-400 hidden mt-0.5">✓ guardado</div>
+                  </td>
                   <td class="p-3 text-right">
                     <div class="flex gap-1 justify-end">
-                      <button onclick='editarProducto(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="bg-[#1e1e1e] border border-[#333] text-white text-[11px] px-3 py-1.5 rounded-full">✏ Editar</button>
+                      <button onclick='editarProducto(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="bg-[#1e1e1e] border border-[#333] text-white text-[11px] px-3 py-1.5 rounded-full hover:bg-[#2a2a2a]">✏ Editar</button>
                       <button onclick="mostrarDetalleEscaneado('${p.codigo}')" class="bg-white text-black text-[11px] font-bold px-3 py-1.5 rounded-full">👁</button>
                       <button onclick="eliminarProductoDefinitivo(${p.id}, '${p.codigo}')" class="bg-[#1a1a1a] border border-[#ef4444]/30 text-[#ef4444] text-[11px] px-2 py-1.5 rounded-full">🗑</button>
                     </div>
@@ -233,6 +242,46 @@ function guardarStockDirecto(id){
       inp.style.borderColor='#22c55e';
       setTimeout(()=>inp.style.borderColor='#333',1000);
     }
+  });
+}
+function parsePrecioInput(s){
+  if(!s) return 0;
+  // permite 250000, 250.000, 250.000,00, 212.500,00
+  s = s.toString().trim().replace(/\$/g,'').replace(/\s/g,'');
+  // si tiene coma, asumimos formato AR: 212.500,00 -> 212500.00
+  if(s.includes(',')){
+    s = s.replace(/\./g,'').replace(',','.');
+  }
+  return parseFloat(s)||0;
+}
+function guardarPrecioDirecto(id){
+  const inp=document.getElementById('precio-'+id);
+  const status=document.getElementById('precio-status-'+id);
+  let nuevo=parsePrecioInput(inp.value);
+  if(nuevo<=0) return;
+  // evitar guardado repetido si no cambió
+  let prod = todosProductos.find(x=>x.id===id);
+  if(prod && Math.abs(parseFloat(prod.precio)-nuevo)<0.01){
+    return;
+  }
+  inp.style.borderColor='#facc15';
+  fetch('/api/actualizar_precio/',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken': getCSRF()},
+    body:JSON.stringify({producto_id: id, precio: nuevo})
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok){
+      if(prod) prod.precio=d.precio;
+      inp.value=d.precio;
+      inp.style.borderColor='#22c55e';
+      if(status){ status.classList.remove('hidden'); setTimeout(()=>status.classList.add('hidden'), 2000); }
+      setTimeout(()=>inp.style.borderColor='#333',1000);
+    } else {
+      alert('Error: '+(d.error||''));
+      inp.style.borderColor='#ef4444';
+    }
+  }).catch(e=>{
+    inp.style.borderColor='#ef4444';
   });
 }
 function mostrarDetalleEscaneado(codigo){
