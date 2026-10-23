@@ -870,3 +870,28 @@ def api_aplicar_suba_categoria(request):
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
 
+@login_required
+@csrf_exempt
+def api_actualizar_precio(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        d = json.loads(request.body)
+        pid = d.get('producto_id')
+        try:
+            nuevo = float(d.get('precio',0))
+        except:
+            nuevo=0
+        if not pid or nuevo<=0:
+            return JsonResponse({'ok': False, 'error': 'Datos invalidos'})
+        prod = Producto.objects.get(id=pid)
+        prod.precio = nuevo
+        prod.save()
+        _log_accion(request, f"Cambio precio directo {prod.codigo} a {nuevo}")
+        return JsonResponse({'ok': True, 'precio': float(prod.precio), 'id': prod.id})
+    except Producto.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Producto no existe'})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})
+

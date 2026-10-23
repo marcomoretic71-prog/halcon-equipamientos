@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/guardar_producto/', views.api_guardar_producto, name='api_guardar_producto'),
     path('api/eliminar_producto/<int:producto_id>/', views.api_eliminar_producto, name='api_eliminar_producto'),
     path('api/limpiar_duplicados_global/', views.api_limpiar_duplicados_global, name='api_limpiar_duplicados_global'),
+    path('api/actualizar_precio/', views.api_actualizar_precio, name='api_actualizar_precio'),
     path('api/actualizar_stock/', views.api_actualizar_stock, name='api_actualizar_stock'),
     path('api/sincronizar_categorias/', views.api_sincronizar_categorias, name='api_sincronizar_categorias'),
     path('api/aplicar_suba_categoria/', views.api_aplicar_suba_categoria, name='api_aplicar_suba_categoria'),
