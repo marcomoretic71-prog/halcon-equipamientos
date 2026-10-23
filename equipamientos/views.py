@@ -10,7 +10,7 @@ from django.contrib.auth.decorators import login_required
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
-from .models import Cliente, Producto, Presupuesto, ItemPresupuesto, ListaPrecio, ItemListaPrecio, Venta, ItemVenta, MovimientoCaja
+from .models import Cliente, Producto, Presupuesto, ItemPresupuesto, ListaPrecio, ItemListaPrecio, Venta, ItemVenta, MovimientoCaja, RegistroAcceso
 from django.db import transaction
 
 DATOS_EMPRESA = {
@@ -23,6 +23,14 @@ DATOS_EMPRESA = {
     "condiciones": "Se reserva con seña del 10%. Validez 15 días.",
     "footer": "¡Gracias por confiar en HALCÓN EQUIPAMIENTOS!"
 }
+
+def _log_accion(request, accion):
+    try:
+        ip = request.META.get('REMOTE_ADDR')
+        user = request.user.username if request.user.is_authenticated else 'anon'
+        RegistroAcceso.objects.create(usuario=user, accion=accion, ip=ip)
+    except:
+        pass
 
 @login_required
 def dashboard(request): 
@@ -126,6 +134,7 @@ def api_caja_eliminar(request):
             d = json.loads(request.body)
             mid = d.get('id')
             MovimientoCaja.objects.filter(id=mid).delete()
+            _log_accion(request, f"Elimino mov caja {mid}")
             return JsonResponse({'ok': True})
         except Exception as e:
             return JsonResponse({'ok': False, 'error': str(e)})
@@ -214,6 +223,9 @@ def api_guardar_producto(request):
             try: prod_id = int(prod_id)
             except: prod_id = None
         p = Producto.objects.get(id=prod_id) if prod_id else Producto()
+        es_nuevo = prod_id is None
+        precio_viejo = float(p.precio) if not es_nuevo else 0
+        stock_viejo = int(p.stock) if not es_nuevo else 0
         codigo = str(d.get('codigo','')).strip()
         if codigo.endswith('.0'): codigo = codigo[:-2]
         nombre = str(d.get('nombre','')).strip()
@@ -232,6 +244,10 @@ def api_guardar_producto(request):
         try: p.stock = int(float(str(d.get('stock',0)).replace(',','.')))
         except: p.stock = 0
         p.save()
+        if not es_nuevo and (precio_viejo != float(p.precio) or stock_viejo != int(p.stock)):
+            _log_accion(request, f"Cambio Producto {p.codigo}: precio {precio_viejo}->{p.precio} stock {stock_viejo}->{p.stock}")
+        else:
+            _log_accion(request, f"Creo/Edito Producto {p.codigo}")
         return JsonResponse({'ok': True, 'id': p.id})
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -258,6 +274,7 @@ def crear_presupuesto(request):
         return JsonResponse({'ok': True, 'codigo': codigo})
     return JsonResponse({'ok': False})
 
+# BLINDADO: Aplicar suba SOLO toca ItemListaPrecio, NO Producto.precio
 @login_required
 @csrf_exempt
 def modificar_lista(request):
@@ -267,17 +284,19 @@ def modificar_lista(request):
         porcentaje = float(data['porcentaje'])
         if porcentaje == 0: return JsonResponse({'ok': False, 'error': 'Porcentaje 0'})
         factor = 1 + (porcentaje/100)
+        # BACKUP implicito via log
+        _log_accion(request, f"Aplicar suba {porcentaje}% a lista {lista.nombre} - SOLO lista, no pisa producto base")
         for item in lista.items.select_related('producto').all():
-            precio_base = float(item.producto.precio)
+            precio_base = float(item.precio or item.producto.precio)
             nuevo = round(precio_base * factor, 2)
             item.precio = nuevo
             item.precio_unitario = nuevo
             item.save()
-            item.producto.precio = nuevo
-            item.producto.save()
+            # NO TOCAMOS item.producto.precio - BLINDADO
         return JsonResponse({'ok': True})
     return JsonResponse({'ok': False})
 
+# BLINDADO: Editar precio en lista SOLO toca ItemListaPrecio
 @login_required
 @csrf_exempt
 def editar_precio_item_lista(request):
@@ -287,11 +306,12 @@ def editar_precio_item_lista(request):
             item = ItemListaPrecio.objects.select_related('producto').get(id=data.get('item_id'))
             nuevo = float(data.get('precio'))
             if nuevo <= 0: return JsonResponse({'ok': False, 'error': 'precio debe ser > 0'})
+            precio_viejo = float(item.precio)
             item.precio = nuevo
             item.precio_unitario = nuevo
             item.save()
-            item.producto.precio = nuevo
-            item.producto.save()
+            _log_accion(request, f"Edito precio en lista {item.lista.nombre} {item.producto.codigo}: {precio_viejo}->{nuevo} (NO pisa producto base)")
+            # NO TOCAMOS item.producto.precio - BLINDADO
             return JsonResponse({'ok': True, 'nuevo_precio': nuevo})
         except Exception as e:
             return JsonResponse({'ok': False, 'error': str(e)})
@@ -303,8 +323,10 @@ def api_sumar_stock(request):
     if request.method == 'POST':
         d=json.loads(request.body)
         p=Producto.objects.get(id=d['id'])
+        viejo = p.stock
         p.stock += int(d['cantidad'])
         p.save()
+        _log_accion(request, f"Suma stock {p.codigo}: {viejo}->{p.stock} (+{d['cantidad']})")
         return JsonResponse({'ok':True, 'nuevo_stock': p.stock})
     return JsonResponse({'ok':False})
 
@@ -316,8 +338,10 @@ def api_reponer_codigo(request):
         try:
             p=Producto.objects.filter(Q(codigo__iexact=d['codigo'].strip()) | Q(barcode__iexact=d['codigo'].strip())).first()
             if not p: raise Exception('no encontrado')
+            viejo = p.stock
             p.stock += int(d['cantidad'])
             p.save()
+            _log_accion(request, f"Reponer {p.codigo}: {viejo}->{p.stock}")
             return JsonResponse({'ok':True})
         except:
             return JsonResponse({'ok':False, 'error':'Código no encontrado'})
@@ -344,6 +368,7 @@ def api_convertir_a_venta(request):
             venta.stock_descontado = True
             venta.save()
             MovimientoCaja.objects.create(tipo='INGRESO', concepto=f"Venta {codigo_venta} - {pres.cliente.nombre}", monto=venta.total, forma_pago=forma_pago, venta=venta)
+            _log_accion(request, f"Convirtio presupuesto {pres.codigo} a venta {codigo_venta} total {venta.total}")
             return JsonResponse({'ok': True, 'codigo_venta': codigo_venta})
         except Presupuesto.DoesNotExist:
             return JsonResponse({'ok': False, 'error': 'Presupuesto no encontrado'})
@@ -371,6 +396,7 @@ def api_venta_directa(request):
             prod.stock = max(0, prod.stock - int(it['cantidad']))
             prod.save()
         MovimientoCaja.objects.create(tipo='INGRESO', concepto=f"Venta Directa {codigo} - {cliente.nombre}", monto=venta.total, forma_pago=venta.forma_pago, venta=venta)
+        _log_accion(request, f"Venta directa {codigo} cliente {cliente.nombre} total {venta.total}")
         return JsonResponse({'ok': True, 'codigo': codigo})
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -572,8 +598,10 @@ def api_actualizar_stock(request):
         if stock < 0:
             stock = 0
         prod = Producto.objects.get(id=producto_id)
+        viejo = prod.stock
         prod.stock = stock
         prod.save()
+        _log_accion(request, f"Actualizo stock {prod.codigo}: {viejo}->{stock}")
         return JsonResponse({'ok': True, 'stock': prod.stock})
     except Producto.DoesNotExist:
         return JsonResponse({'ok': False, 'error': 'Producto no existe'})
@@ -603,6 +631,7 @@ def api_sincronizar_categorias(request):
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
 
+# BLINDADO: Importar Excel SOLO crea/actualiza ItemListaPrecio, NO pisa Producto.precio ni nombre si ya existe
 @login_required
 @csrf_exempt
 def api_importar_lista_excel(request):
@@ -634,13 +663,13 @@ def api_importar_lista_excel(request):
                 if created: 
                     creados += 1
                 else:
-                    prod.nombre = nombre
-                    prod.precio = precio
+                    # BLINDADO: NO pisamos precio ni nombre si ya existe, solo categoria si es OTRO
                     if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
                         prod.categoria = nombre_base
-                    prod.save()
+                        prod.save()
                     actualizados += 1
                 ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
+            _log_accion(request, f"Importo {len(items)} a lista {lista.nombre}: creados {creados} actualizados {actualizados} - BLINDADO no pisa precio base")
             return JsonResponse({'ok': True, 'lista_nombre': lista.nombre, 'creados': creados, 'actualizados': actualizados, 'total_lista': lista.items.count(), 'categoria_usada': nombre_base})
         import openpyxl
         lista_id = request.POST.get('lista_id')
@@ -660,13 +689,14 @@ def api_importar_lista_excel(request):
             precio = _limpiar_precio_br(row[2]) if len(row) > 2 else 0
             if precio <= 0: continue
             prod, _ = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': nombre_base})
-            prod.nombre = nombre
-            prod.precio = precio
+            # BLINDADO: no pisamos precio base
             if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
-                prod.categoria = nombre_base
-            prod.save()
+                if prod.categoria != nombre_base:
+                    prod.categoria = nombre_base
+                    prod.save()
             ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
             count += 1
+        _log_accion(request, f"Importo Excel a {lista.nombre}: {count} - BLINDADO")
         return JsonResponse({'ok': True, 'importados': count, 'categoria_usada': nombre_base})
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -724,6 +754,7 @@ def api_eliminar_producto(request, producto_id):
         codigo = producto.codigo
         ItemListaPrecio.objects.filter(producto=producto).delete()
         producto.delete()
+        _log_accion(request, f"Elimino producto {codigo}")
         return JsonResponse({'ok': True, 'codigo': codigo, 'borrado': True})
     except Producto.DoesNotExist:
         return JsonResponse({'ok': False, 'error': 'Producto no existe'})
@@ -753,6 +784,7 @@ def api_limpiar_duplicados_global(request):
                 if getattr(p, 'barcode', '') and str(p.barcode).endswith('.0'):
                     p.barcode = str(p.barcode)[:-2]
                 p.save()
+        _log_accion(request, f"Limpio duplicados .0: {borrados}")
         return JsonResponse({'ok': True, 'borrados': borrados})
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -763,9 +795,6 @@ def api_limpiar_duplicados_global(request):
 def api_producto_reactivar(request):
     return JsonResponse({'ok': False, 'error': 'Función desactivada en versión original'})
 
-# ============================================================
-# NUEVO - ELIMINAR VENTA CON DEVOLUCION DE STOCK Y CAJA
-# ============================================================
 @login_required
 @csrf_exempt
 def api_eliminar_venta(request):
@@ -776,36 +805,26 @@ def api_eliminar_venta(request):
         venta_id = data.get('venta_id') or data.get('id')
         if not venta_id:
             return JsonResponse({'ok': False, 'error': 'Falta venta_id'})
-        
         try:
             venta = Venta.objects.select_related('cliente').get(id=venta_id)
         except Venta.DoesNotExist:
             return JsonResponse({'ok': False, 'error': 'Venta no existe'})
-
         with transaction.atomic():
             items = list(ItemVenta.objects.select_related('producto').filter(venta=venta))
-            
-            # 1. Devolver stock
             productos_devueltos = []
             for it in items:
                 prod = it.producto
                 prod.stock = (prod.stock or 0) + (it.cantidad or 0)
                 prod.save()
                 productos_devueltos.append(f"{prod.codigo} x{it.cantidad}")
-
-            # 2. Borrar movimientos de caja asociados
-            # Por FK venta y por concepto que contiene el codigo
-            caja_borrados = 0
             qs_caja = MovimientoCaja.objects.filter(Q(venta=venta) | Q(concepto__icontains=venta.codigo))
             caja_borrados = qs_caja.count()
             qs_caja.delete()
-
-            # 3. Borrar venta (cascada borra ItemVenta)
             codigo_borrado = venta.codigo
             total_borrado = float(venta.total)
             cliente_nombre = venta.cliente.nombre
             venta.delete()
-
+            _log_accion(request, f"Elimino venta {codigo_borrado} cliente {cliente_nombre} total {total_borrado} devolvio {productos_devueltos} caja borrados {caja_borrados}")
         return JsonResponse({
             'ok': True,
             'codigo': codigo_borrado,
@@ -815,7 +834,6 @@ def api_eliminar_venta(request):
             'caja_borrados': caja_borrados,
             'mensaje': f"Venta {codigo_borrado} eliminada. Stock devuelto: {', '.join(productos_devueltos)}. Caja: ${total_borrado:,.0f} eliminado."
         })
-
     except Exception as e:
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})

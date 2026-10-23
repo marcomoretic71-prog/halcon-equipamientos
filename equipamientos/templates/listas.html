@@ -34,7 +34,7 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
 <div class="max-w-[1600px] mx-auto p-4 md:p-6">
   <div class="flex flex-col md:flex-row justify-between gap-4 mb-6">
     <div class="flex items-center gap-3 flex-wrap">
-      <h1 class="text-[22px] font-extrabold tracking-tight">Listas de Precios</h1>
+      <h1 class="text-[22px] font-extrabold tracking-tight">Listas de Precios <span class="ml-2 text-[11px] bg-green-500/20 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-full">SOLO LECTURA - NO PISA PRECIO BASE</span></h1>
       <button onclick="abrirImportModal()" class="bg-[#facc15] text-black font-bold px-5 py-2 rounded-full text-sm hover:bg-yellow-300">📥 Importar Excel</button>
       <button onclick="crearListaNueva()" class="bg-[#1e1e1e] border border-[#2a2a2a] text-white font-bold px-4 py-2 rounded-full text-sm hover:bg-[#2a2a2a]">＋ Nueva Lista</button>
     </div>
@@ -44,7 +44,9 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
       <button onclick="toggleAll(false)" class="bg-[#1e1e1e] border border-[#2a2a2a] rounded-full px-4 py-2 text-sm">Cerrar todo</button>
     </div>
   </div>
-  <!-- CAMBIO: FULL WIDTH, UNA ABAJO DE OTRA -->
+  <div class="bg-[#facc15]/10 border border-[#facc15]/20 rounded-[12px] p-3 mb-6 text-[11px] text-[#facc15]">
+    <b>🔒 MODO BLINDADO:</b> Esta vista es solo informativa. Importar un Excel crea productos nuevos o los agrega a la lista, pero <b>NUNCA pisa el precio base</b> que cargaste en Productos. El precio de venta solo se cambia en Productos.
+  </div>
   <div class="flex flex-col gap-4">
   {% for lista in listas %}
     <div class="bg-[#151515] border border-[#262626] rounded-[16px] overflow-hidden w-full">
@@ -52,24 +54,21 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
         <div class="flex items-center gap-4">
           <div class="w-11 h-11 rounded-full bg-[#facc15]/15 text-[#facc15] flex items-center justify-center font-black text-[14px]">{{ lista.items.count }}</div>
           <div>
-            <div class="font-black text-[13px] uppercase tracking-wide">{{ lista.nombre }} - BASE - {{ lista.items.count }} PRODUCTOS</div>
-            <div class="text-[11px] text-zinc-500 mt-0.5">Click para desplegar • Stock y precios editables</div>
+            <div class="font-black text-[13px] uppercase tracking-wide">{{ lista.nombre }} - {{ lista.items.count }} PRODUCTOS</div>
+            <div class="text-[11px] text-zinc-500 mt-0.5">Click para desplegar • Solo lectura • No modifica precio base</div>
           </div>
         </div>
         <div class="flex items-center gap-3">
-          <span class="text-[11px] text-zinc-500 hidden md:block">PRECIO ▼</span>
+          <span class="text-[11px] text-zinc-500 hidden md:block">SOLO LECTURA</span>
           <span id="arrow-{{ lista.id }}" class="text-zinc-500">▼</span>
         </div>
       </button>
       <div id="body-{{ lista.id }}" class="hidden border-t border-[#262626]">
         <div class="bg-[#1a1a1a] p-3 flex items-center gap-2 border-b border-[#262626] flex-wrap">
-          <span class="text-[11px] text-zinc-400">Aumento por lista:</span>
-          <input id="pct-{{ lista.id }}" type="number" placeholder="%" class="bg-[#0f0f0f] border border-[#333] rounded-full px-3 py-1.5 w-20 text-sm text-center outline-none">
-          <span class="text-sm">%</span>
-          <button onclick="aplicarPorcentaje('{{ lista.id }}')" class="bg-[#facc15] text-black font-bold px-4 py-1.5 rounded-full text-xs hover:bg-yellow-300">Aplicar suba</button>
-          <div class="w-px h-6 bg-[#333] mx-2 hidden md:block"></div>
-          <button onclick="exportarLista('{{ lista.id }}')" class="bg-[#222] border border-[#333] text-zinc-300 px-3 py-1.5 rounded-full text-xs">⬇ Exportar</button>
-          <button onclick="limpiarDuplicadosLista('{{ lista.id }}')" class="bg-red-500/10 border border-red-500/20 text-red-400 px-3 py-1.5 rounded-full text-xs hover:bg-red-500 hover:text-white">🧹 Quitar duplicados</button>
+          <span class="text-[11px] text-zinc-400">Esta lista es informativa. El precio de proveedor no pisa el precio base de Productos.</span>
+          <div class="ml-auto flex gap-2">
+            <button onclick="exportarLista('{{ lista.id }}')" class="bg-[#222] border border-[#333] text-zinc-300 px-3 py-1.5 rounded-full text-xs">⬇ Exportar</button>
+          </div>
           <span id="status-{{ lista.id }}" class="text-[11px] text-zinc-500 ml-2"></span>
         </div>
         <div class="max-h-[650px] overflow-auto">
@@ -78,35 +77,19 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
               <tr>
                 <th class="text-left p-3 w-[110px]">Código</th>
                 <th class="text-left p-3">Producto</th>
-                <th class="text-center p-3 w-[160px]">Stock</th>
-                <th class="text-right p-3 w-[155px]">Precio</th>
-                <th class="p-3 w-[110px] text-right">Acción</th>
+                <th class="text-center p-3 w-[100px]">Stock Base</th>
+                <th class="text-right p-3 w-[140px]">Precio Proveedor (lista)</th>
+                <th class="text-right p-3 w-[140px]">Precio Base (venta)</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-[#1e1e1e]">
             {% for item in lista.items.all %}
-              <tr id="row-{{ item.id }}" class="hover:bg-[#1e1e1e]/50 prod-row" data-codigo="{{ item.producto.codigo|lower }}" data-nombre="{{ item.producto.nombre|lower }}">
+              <tr class="hover:bg-[#1e1e1e]/50 prod-row" data-codigo="{{ item.producto.codigo|lower }}" data-nombre="{{ item.producto.nombre|lower }}">
                 <td class="p-3 text-zinc-500 font-mono text-[11px]">{{ item.producto.codigo }}</td>
-                <td class="p-3 text-zinc-300">
-                  <div class="max-w-[700px] truncate" title="{{ item.producto.nombre }}">{{ item.producto.nombre }}</div>
-                </td>
-                <!-- STOCK EDITABLE -->
-                <td class="p-2">
-                  <div class="flex items-center justify-center gap-1">
-                    <button onclick="cambiarStock('{{ item.id }}','{{ item.producto.id }}', -1)" class="w-7 h-7 rounded-full bg-[#222] border border-[#333] text-white hover:bg-[#333] font-bold flex items-center justify-center">−</button>
-                    <input id="stock-{{ item.id }}" data-item="{{ item.id }}" data-producto="{{ item.producto.id }}" data-lista="{{ lista.id }}" type="number" value="{{ item.producto.stock|default:0 }}" class="stock-input bg-[#0f0f0f] border border-[#333] rounded-lg px-1 py-1.5 w-[60px] text-center outline-none focus:border-[#facc15] font-bold {% if item.producto.stock == 0 %}text-red-400{% elif item.producto.stock <= 3 %}text-yellow-400{% else %}text-green-400{% endif %}">
-                    <button onclick="cambiarStock('{{ item.id }}','{{ item.producto.id }}', 1)" class="w-7 h-7 rounded-full bg-[#222] border border-[#333] text-white hover:bg-[#333] font-bold flex items-center justify-center">+</button>
-                  </div>
-                </td>
-                <td class="p-3 text-right">
-                  <input id="price-{{ item.id }}" data-item="{{ item.id }}" data-lista="{{ lista.id }}" type="text" value="{{ item.producto.precio }}" class="price-input bg-[#0f0f0f] border border-[#333] rounded-lg px-2 py-1.5 w-[130px] text-right outline-none focus:border-yellow-400">
-                </td>
-                <td class="p-3 text-right">
-                  <div class="flex gap-1 justify-end items-center">
-                    <button onclick="guardar('{{ item.id }}')" class="w-7 h-7 rounded-full bg-[#facc15] text-black font-bold hover:bg-yellow-300 flex items-center justify-center text-[12px]" title="Guardar precio">›</button>
-                    <button onclick="eliminarDeLista('{{ item.id }}', '{{ item.producto.codigo|escapejs }}')" class="w-7 h-7 rounded-full bg-[#222] border border-[#333] text-red-400 hover:bg-red-500 hover:text-white text-[12px] font-bold flex items-center justify-center" title="Eliminar de la lista">✕</button>
-                  </div>
-                </td>
+                <td class="p-3 text-zinc-300"><div class="max-w-[700px] truncate" title="{{ item.producto.nombre }}">{{ item.producto.nombre }}</div></td>
+                <td class="p-3 text-center font-bold {% if item.producto.stock == 0 %}text-red-400{% elif item.producto.stock <= 3 %}text-yellow-400{% else %}text-green-400{% endif %}">{{ item.producto.stock }}</td>
+                <td class="p-3 text-right text-zinc-400">${{ item.precio }}</td>
+                <td class="p-3 text-right font-bold text-[#facc15]">${{ item.producto.precio }}</td>
               </tr>
             {% endfor %}
             </tbody>
@@ -117,15 +100,18 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
   {% endfor %}
   </div>
 </div>
-<!-- MODAL IMPORT -->
+<!-- MODAL IMPORT - BLINDADO -->
 <div id="modalImport" class="fixed inset-0 z-[100] hidden bg-black/70 backdrop-blur flex items-center justify-center p-4">
   <div class="bg-[#151515] border border-[#262626] rounded-[20px] w-full max-w-[650px] p-6">
     <div class="flex justify-between items-center mb-4">
-      <h3 class="font-black text-[18px]">📥 Importar Lista BRACCO / Excel</h3>
+      <h3 class="font-black text-[18px]">📥 Importar Lista - MODO BLINDADO</h3>
       <button onclick="cerrarImportModal()" class="w-8 h-8 rounded-full bg-[#222]">✕</button>
     </div>
-    <label class="block mb-2 text-[12px] text-zinc-400">Nombre de la lista (a tu gusto)</label>
-    <input id="nombreListaInput" type="text" placeholder="Ej: BRACCO - BASE - OCTUBRE 2025" class="w-full bg-[#0f0f0f] border border-[#333] rounded-full px-4 py-2.5 text-sm mb-4 outline-none focus:border-yellow-400">
+    <div class="bg-green-500/10 border border-green-500/20 rounded-[12px] p-3 mb-4 text-[11px] text-green-400">
+      ✅ <b>Blindado:</b> Si el código ya existe, NO pisa el precio base ni el stock. Solo agrega el producto a esta lista con el precio del proveedor para consulta.
+    </div>
+    <label class="block mb-2 text-[12px] text-zinc-400">Nombre de la lista</label>
+    <input id="nombreListaInput" type="text" placeholder="Ej: PROVEEDOR BRASIL - OCTUBRE 2025" class="w-full bg-[#0f0f0f] border border-[#333] rounded-full px-4 py-2.5 text-sm mb-4 outline-none focus:border-yellow-400">
     <label class="block mb-2 text-[12px] text-zinc-400">¿A qué lista importar?</label>
     <select id="listaDestino" class="w-full bg-[#0f0f0f] border border-[#333] rounded-full px-4 py-2.5 text-sm mb-4">
       <option value="nueva">＋ Crear lista nueva con ese nombre</option>
@@ -136,7 +122,7 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
     <div id="dropZone" class="border-2 border-dashed border-[#333] rounded-[16px] p-8 text-center hover:border-[#facc15] hover:bg-[#1a1a1a] cursor-pointer transition">
       <div class="text-3xl mb-2">📄</div>
       <div class="text-sm font-bold">Arrastrá tu Excel/CSV acá o clickeá</div>
-      <div class="text-[11px] text-zinc-500 mt-1">.xlsx, .xls, .csv (BRACCO ;)</div>
+      <div class="text-[11px] text-zinc-500 mt-1">.xlsx, .xls, .csv</div>
       <input id="fileExcel" type="file" accept=".xlsx,.xls,.csv" class="hidden">
     </div>
     <div id="previewArea" class="hidden mt-4">
@@ -147,7 +133,7 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
       <div class="bg-[#0f0f0f] rounded-[12px] max-h-[220px] overflow-auto p-2 text-[11px] font-mono" id="previewTable"></div>
       <div class="flex gap-2 mt-4">
         <button onclick="cerrarImportModal()" class="flex-1 bg-[#222] border border-[#333] py-3 rounded-full text-sm">Cancelar</button>
-        <button id="btnConfirmar" onclick="confirmarImport()" class="flex-1 bg-[#facc15] text-black font-black py-3 rounded-full text-sm">✅ Confirmar e Importar</button>
+        <button id="btnConfirmar" onclick="confirmarImport()" class="flex-1 bg-[#facc15] text-black font-black py-3 rounded-full text-sm">✅ Confirmar e Importar (blindado)</button>
       </div>
     </div>
   </div>
@@ -215,7 +201,7 @@ function mostrarPreview(){
   let html = datosImport.slice(0,12).map(d=>`<div class="flex justify-between border-b border-[#222] py-1"><span>${d.codigo} - ${d.nombre.substring(0,40)}</span><span class="text-[#facc15] font-bold">$ ${d.precio.toLocaleString('es-AR')}</span></div>`).join('');
   if(datosImport.length>12) html+=`<div class="text-zinc-500 text-center py-2">... y ${datosImport.length-12} más</div>`;
   document.getElementById('previewTable').innerHTML = html;
-  document.getElementById('previewStatus').textContent = `Listo para importar`;
+  document.getElementById('previewStatus').textContent = `Listo - blindado no pisa precio base`;
 }
 function confirmarImport(){
   if(datosImport.length===0){ alert('No hay datos'); return; }
@@ -228,9 +214,9 @@ function confirmarImport(){
     headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'},
     body:JSON.stringify({lista_id: listaId, nombre_nueva: nombreNuevo, items: datosImport})
   }).then(r=>r.json()).then(d=>{
-    if(d.ok){ alert(`✅ ${d.creados} creados, ${d.actualizados} actualizados`); location.reload(); }
+    if(d.ok){ alert(`✅ ${d.creados} creados, ${d.actualizados} solo agregados a lista (precio base intacto)`); location.reload(); }
     else alert('Error: '+d.error);
-  }).catch(e=>alert('Error de red: '+e)).finally(()=>{btn.textContent='✅ Confirmar e Importar'; btn.disabled=false;});
+  }).catch(e=>alert('Error: '+e)).finally(()=>{btn.textContent='✅ Confirmar e Importar (blindado)'; btn.disabled=false;});
 }
 function toggleLista(id){
   const body=document.getElementById('body-'+id);
@@ -244,102 +230,7 @@ function toggleAll(open){
   });
   document.querySelectorAll('[id^=arrow-]').forEach(a=>a.textContent=open?'▲':'▼');
 }
-function parseARS(s){ if(!s) return 0; return parseFloat(s.replace(/\$/g,'').trim().replace(/\./g,'').replace(',','.'))||0; }
-function formatARS(n){ return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS'}).format(n); }
-function guardar(id){
-  const inp=document.getElementById('price-'+id);
-  const val=parseARS(inp.value);
-  if(val<=0){ alert('Precio inválido'); return; }
-  inp.style.borderColor='#facc15';
-  fetch('/editar_precio_item_lista/',{ method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'}, body:JSON.stringify({item_id:id, precio:val}) }).then(r=>r.json()).then(d=>{ if(d.ok){ inp.value=formatARS(d.nuevo_precio); inp.style.borderColor='#22c55e'; setTimeout(()=>inp.style.borderColor='#333',1000); } });
-}
-// STOCK NUEVO - RECOMENDADO
-function cambiarStock(itemId, productoId, delta){
-  const inp=document.getElementById('stock-'+itemId);
-  let actual=parseInt(inp.value)||0;
-  let nuevo=actual+delta;
-  if(nuevo<0) nuevo=0;
-  inp.value=nuevo;
-  guardarStock(itemId, productoId, nuevo);
-}
-function guardarStock(itemId, productoId, nuevoValor){
-  const inp=document.getElementById('stock-'+itemId);
-  if(nuevoValor===undefined) nuevoValor=parseInt(inp.value)||0;
-  inp.style.borderColor='#facc15';
-  fetch('/api/actualizar_stock/',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'},
-    body:JSON.stringify({producto_id: productoId, stock: nuevoValor})
-  }).then(r=>r.json()).then(d=>{
-    if(d.ok){
-      inp.classList.remove('text-red-400','text-yellow-400','text-green-400');
-      if(d.stock==0) inp.classList.add('text-red-400');
-      else if(d.stock<=3) inp.classList.add('text-yellow-400');
-      else inp.classList.add('text-green-400');
-      inp.style.borderColor='#22c55e';
-      setTimeout(()=>inp.style.borderColor='#333',1200);
-      document.querySelectorAll(`.stock-input[data-producto="${productoId}"]`).forEach(other=>{
-        if(other.id!==inp.id){ other.value=d.stock; other.className=inp.className; }
-      });
-    } else alert('Error: '+(d.error||''));
-  });
-}
-document.addEventListener('change', e=>{
-  if(e.target.classList.contains('stock-input')){
-    let productoId=e.target.dataset.producto;
-    let itemId=e.target.dataset.item;
-    guardarStock(itemId, productoId);
-  }
-});
-async function aplicarPorcentaje(listaId){
-  const pctInput=document.getElementById('pct-'+listaId);
-  const status=document.getElementById('status-'+listaId);
-  let pct=parseFloat(pctInput.value);
-  if(!pct || pct===0){ alert('Pone un %'); return; }
-  if(!confirm(`¿Aplicar ${pct}% de aumento a toda la lista?`)) return;
-  status.textContent='Aplicando...';
-  const inputs=document.querySelectorAll(`.price-input[data-lista="${listaId}"]`);
-  let count=0;
-  for(let inp of inputs){
-    let actual=parseARS(inp.value);
-    let nuevo=actual*(1+pct/100);
-    inp.value=formatARS(nuevo);
-    try{ await fetch('/editar_precio_item_lista/',{ method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'}, body:JSON.stringify({item_id:inp.dataset.item, precio:nuevo}) }); count++; status.textContent=`${count}/${inputs.length} actualizados`; }catch(e){}
-    await new Promise(r=>setTimeout(r,80));
-  }
-  status.textContent=`Listo - ${count} actualizados ${pct}%`;
-}
 function exportarLista(id){ window.location='/api/exportar_lista_excel/?lista_id='+id; }
-async function eliminarDeLista(item_id, codigo){
-  if(!confirm(`¿Eliminar ${codigo} de esta lista?\n\nSolo lo saca de ESTA lista, no borra el producto del sistema.`)) return;
-  const row = document.getElementById('row-'+item_id);
-  if(row) row.style.opacity = '0.3';
-  try{
-    let res = await fetch('/api/eliminar_item_lista/', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'},
-      body: JSON.stringify({item_id: item_id})
-    });
-    let data = await res.json();
-    if(data.ok){ if(row) row.remove(); }
-    else { alert('Error: '+(data.error||'')); if(row) row.style.opacity='1'; }
-  }catch(e){ alert('Error: '+e.message); if(row) row.style.opacity='1'; }
-}
-async function limpiarDuplicadosLista(listaId){
-  if(!confirm('¿Limpiar duplicados? Deja solo el más nuevo por código.')) return;
-  const status=document.getElementById('status-'+listaId);
-  status.textContent='Limpiando...';
-  try{
-    let res = await fetch('/api/limpiar_duplicados_lista/', {
-      method:'POST',
-      headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'},
-      body: JSON.stringify({lista_id: listaId})
-    });
-    let data = await res.json();
-    if(data.ok){ alert(`✅ Eliminados ${data.eliminados} duplicados`); location.reload(); }
-    else { alert('Error: '+data.error); status.textContent=''; }
-  }catch(e){ alert('Error: '+e.message); status.textContent=''; }
-}
 document.getElementById('buscador').addEventListener('input', e=>{
   let q=e.target.value.toLowerCase();
   document.querySelectorAll('.prod-row').forEach(row=>{
