@@ -122,20 +122,26 @@ function renderAcordeones(data){
     const div = document.createElement('div');
     div.className='bg-[#151515] border border-[#262626] rounded-[16px] overflow-hidden w-full';
     div.innerHTML=`
-      <button onclick="toggleCat('${catId}')" class="w-full flex items-center justify-between p-4 hover:bg-[#1c1c1c] transition text-left">
-        <div class="flex items-center gap-4">
+      <div class="w-full flex flex-col md:flex-row md:items-center justify-between gap-2 p-4 hover:bg-[#1c1c1c] transition">
+        <button onclick="toggleCat('${catId}')" class="flex items-center gap-4 text-left flex-1">
           <div class="w-11 h-11 rounded-full bg-[#facc15]/15 text-[#facc15] flex items-center justify-center font-black text-[14px]">${prods.length}</div>
           <div>
             <div class="font-black text-[13px] uppercase tracking-wide">${cat} - ${prods.length} PRODUCTOS</div>
-            <div class="text-[11px] text-zinc-500 mt-0.5">Click para desplegar • Stock y precios editables • Buscador arriba activo</div>
+            <div class="text-[11px] text-zinc-500 mt-0.5">Click para desplegar • Stock y precios editables</div>
           </div>
+          <span id="arrow-${catId}" class="text-zinc-500 ml-4">▼</span>
+        </button>
+        <div class="flex items-center gap-2 flex-wrap md:justify-end">
+          <div class="flex items-center gap-1 bg-[#0f0f0f] border border-[#333] rounded-full px-2 py-1">
+            <input id="pct-${catId}" type="number" placeholder="%" class="bg-transparent w-[50px] text-center text-xs outline-none placeholder:text-zinc-600">
+            <span class="text-xs text-zinc-500">%</span>
+            <button onclick="aplicarSubaCategoria('${cat}', '${catId}')" class="bg-[#facc15] text-black font-bold px-3 py-1 rounded-full text-[11px] hover:bg-yellow-300">Aplicar suba a ${cat}</button>
+          </div>
+          <button onclick="guardarCambiosCategoria('${catId}')" class="bg-[#22c55e]/20 border border-[#22c55e]/30 text-[#4ade80] font-bold px-4 py-1.5 rounded-full text-[11px] hover:bg-[#22c55e]/30">💾 Guardar cambios</button>
         </div>
-        <div class="flex items-center gap-3">
-          <span class="text-[11px] text-zinc-500 hidden md:block">PRECIO ▼</span>
-          <span id="arrow-${catId}" class="text-zinc-500">▼</span>
-        </div>
-      </button>
+      </div>
       <div id="body-${catId}" class="hidden border-t border-[#262626]">
+        <div id="status-${catId}" class="hidden bg-[#facc15]/10 border-b border-[#facc15]/20 text-[11px] text-[#facc15] px-4 py-2"></div>
         <div class="max-h-[700px] overflow-auto">
           <table class="w-full text-[12px]">
             <thead class="sticky top-0 bg-[#1e1e1e] text-[10px] text-zinc-500 uppercase z-10">
@@ -340,6 +346,43 @@ function guardarProducto(){
   .then(async r=>{ let d = await r.json(); if(!r.ok || !d.ok) throw new Error(d.error || 'Error al guardar'); return d; })
   .then(d=>{ cerrarModalProducto(); cargarTodos(); })
   .catch(err=>{ alert(err.message); });
+}
+async function aplicarSubaCategoria(categoria, catId){
+  const pctInput = document.getElementById('pct-'+catId);
+  const status = document.getElementById('status-'+catId);
+  let pct = parseFloat(pctInput.value);
+  if(!pct || pct===0){ alert('Poné un % válido'); return; }
+  if(!confirm(`¿Aplicar ${pct}% de aumento a TODA la categoría ${categoria}?\n\nEsto cambia el precio base de venta en Productos. No se puede deshacer fácil.`)) return;
+  status.classList.remove('hidden');
+  status.textContent = `Aplicando ${pct}% a ${categoria}...`;
+  try{
+    let res = await fetch('/api/aplicar_suba_categoria/',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRFToken': getCSRF()},
+      body: JSON.stringify({categoria: categoria, porcentaje: pct})
+    });
+    let data = await res.json();
+    if(data.ok){
+      status.textContent = `✅ ${data.actualizados} productos actualizados +${pct}%`;
+      status.className = 'bg-green-500/20 border-b border-green-500/30 text-[11px] text-green-400 px-4 py-2';
+      setTimeout(()=>{ status.classList.add('hidden'); }, 3000);
+      cargarTodos();
+    } else {
+      status.textContent = 'Error: '+(data.error||'');
+      status.className = 'bg-red-500/20 border-b border-red-500/30 text-[11px] text-red-400 px-4 py-2';
+    }
+  } catch(e){
+    status.textContent = 'Error de red: '+e.message;
+  }
+}
+function guardarCambiosCategoria(catId){
+  const status = document.getElementById('status-'+catId);
+  status.classList.remove('hidden');
+  status.textContent = `✅ Todos los cambios de esta categoría ya están guardados. Stock se guarda automáticamente con - + y precios con Editar.`;
+  status.className = 'bg-[#22c55e]/10 border-b border-[#22c55e]/20 text-[11px] text-[#4ade80] px-4 py-2';
+  setTimeout(()=>{ status.classList.add('hidden'); }, 4000);
+  // opcional: recargar para asegurar
+  setTimeout(()=>cargarTodos(), 1000);
 }
 document.getElementById('busc').addEventListener('input', ()=>{ setTimeout(filtrarInstantaneo, 100); });
 document.querySelectorAll('.cat-btn').forEach(btn=>{ btn.addEventListener('click', ()=>{ document.querySelectorAll('.cat-btn').forEach(b=>{ b.className='cat-btn bg-[#1e1e1e] border border-[#2a2a2a] text-zinc-400 hover:text-white px-4 py-1.5 rounded-full text-xs uppercase'; }); btn.className='cat-btn active bg-[#facc15] text-black font-bold px-4 py-1.5 rounded-full text-xs'; catActual = btn.dataset.cat; filtrarInstantaneo(); }); });

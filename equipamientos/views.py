@@ -837,3 +837,36 @@ def api_eliminar_venta(request):
     except Exception as e:
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
+
+@login_required
+@csrf_exempt
+def api_aplicar_suba_categoria(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        data = json.loads(request.body)
+        categoria = str(data.get('categoria','')).strip()
+        try:
+            porcentaje = float(data.get('porcentaje',0))
+        except:
+            porcentaje=0
+        if not categoria:
+            return JsonResponse({'ok': False, 'error': 'Falta categoria'})
+        if porcentaje == 0:
+            return JsonResponse({'ok': False, 'error': 'Porcentaje 0'})
+        factor = 1 + (porcentaje/100.0)
+        productos = Producto.objects.filter(categoria__iexact=categoria)
+        actualizados=0
+        for p in productos:
+            viejo=float(p.precio or 0)
+            nuevo=round(viejo*factor,2)
+            if nuevo<=0: continue
+            p.precio=nuevo
+            p.save()
+            actualizados+=1
+        _log_accion(request, f"Aplico suba {porcentaje}% a categoria {categoria}: {actualizados} productos")
+        return JsonResponse({'ok': True, 'actualizados': actualizados, 'categoria': categoria, 'porcentaje': porcentaje})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})
+
