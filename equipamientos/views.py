@@ -11,6 +11,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from .models import Cliente, Producto, Presupuesto, ItemPresupuesto, ListaPrecio, ItemListaPrecio, Venta, ItemVenta, MovimientoCaja
+from django.db import transaction
 
 DATOS_EMPRESA = {
     "whatsapp": "2983512672 / 3843400199",
@@ -716,14 +717,11 @@ def api_eliminar_producto(request, producto_id):
         return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
     try:
         producto = Producto.objects.get(id=producto_id)
-        # Si tiene ventas o presupuestos, no borrar, solo avisar
         tiene_ventas = ItemVenta.objects.filter(producto=producto).exists()
         tiene_presup = ItemPresupuesto.objects.filter(producto=producto).exists()
         if tiene_ventas or tiene_presup:
             return JsonResponse({'ok': False, 'error': f'No se puede borrar {producto.codigo} porque tiene ventas/presupuestos. Borra primero esos comprobantes.'})
-        # Si no tiene historial, borrar de verdad
         codigo = producto.codigo
-        # Borrar items de listas primero
         ItemListaPrecio.objects.filter(producto=producto).delete()
         producto.delete()
         return JsonResponse({'ok': True, 'codigo': codigo, 'borrado': True})
@@ -763,5 +761,61 @@ def api_limpiar_duplicados_global(request):
 @login_required
 @csrf_exempt
 def api_producto_reactivar(request):
-    # Dummy - compatibilidad con urls viejo, no hace nada
     return JsonResponse({'ok': False, 'error': 'Función desactivada en versión original'})
+
+# ============================================================
+# NUEVO - ELIMINAR VENTA CON DEVOLUCION DE STOCK Y CAJA
+# ============================================================
+@login_required
+@csrf_exempt
+def api_eliminar_venta(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        data = json.loads(request.body)
+        venta_id = data.get('venta_id') or data.get('id')
+        if not venta_id:
+            return JsonResponse({'ok': False, 'error': 'Falta venta_id'})
+        
+        try:
+            venta = Venta.objects.select_related('cliente').get(id=venta_id)
+        except Venta.DoesNotExist:
+            return JsonResponse({'ok': False, 'error': 'Venta no existe'})
+
+        with transaction.atomic():
+            items = list(ItemVenta.objects.select_related('producto').filter(venta=venta))
+            
+            # 1. Devolver stock
+            productos_devueltos = []
+            for it in items:
+                prod = it.producto
+                prod.stock = (prod.stock or 0) + (it.cantidad or 0)
+                prod.save()
+                productos_devueltos.append(f"{prod.codigo} x{it.cantidad}")
+
+            # 2. Borrar movimientos de caja asociados
+            # Por FK venta y por concepto que contiene el codigo
+            caja_borrados = 0
+            qs_caja = MovimientoCaja.objects.filter(Q(venta=venta) | Q(concepto__icontains=venta.codigo))
+            caja_borrados = qs_caja.count()
+            qs_caja.delete()
+
+            # 3. Borrar venta (cascada borra ItemVenta)
+            codigo_borrado = venta.codigo
+            total_borrado = float(venta.total)
+            cliente_nombre = venta.cliente.nombre
+            venta.delete()
+
+        return JsonResponse({
+            'ok': True,
+            'codigo': codigo_borrado,
+            'total': total_borrado,
+            'cliente': cliente_nombre,
+            'productos': productos_devueltos,
+            'caja_borrados': caja_borrados,
+            'mensaje': f"Venta {codigo_borrado} eliminada. Stock devuelto: {', '.join(productos_devueltos)}. Caja: ${total_borrado:,.0f} eliminado."
+        })
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})

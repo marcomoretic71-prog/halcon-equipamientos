@@ -8,11 +8,10 @@ urlpatterns = [
     path('listas/', views.listas_view, name='listas'),
     path('presupuestos/', views.presupuestos_view, name='presupuestos'),
     
-    # APIs PRODUCTOS - BLINDADO
+    # APIs PRODUCTOS
     path('api/buscar_productos/', views.api_buscar_productos, name='api_buscar_productos'),
     path('api/guardar_producto/', views.api_guardar_producto, name='api_guardar_producto'),
     path('api/eliminar_producto/<int:producto_id>/', views.api_eliminar_producto, name='api_eliminar_producto'),
-    # path('api/producto/reactivar/' - eliminado al volver a original
     path('api/limpiar_duplicados_global/', views.api_limpiar_duplicados_global, name='api_limpiar_duplicados_global'),
     path('api/actualizar_stock/', views.api_actualizar_stock, name='api_actualizar_stock'),
     path('api/sincronizar_categorias/', views.api_sincronizar_categorias, name='api_sincronizar_categorias'),
@@ -37,6 +36,7 @@ urlpatterns = [
     path('api/caja_lista/', views.api_caja_lista, name='api_caja_lista'),
     path('caja/', views.caja_view, name='caja'),
     path('api/caja_eliminar/', views.api_caja_eliminar, name='api_caja_eliminar'),
+    path('api/eliminar_venta/', views.api_eliminar_venta, name='api_eliminar_venta'),
 
     # LISTAS
     path('api/crear_lista/', views.api_crear_lista, name='api_crear_lista'),
