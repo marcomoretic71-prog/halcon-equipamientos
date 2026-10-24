@@ -50,7 +50,10 @@ def dashboard(request):
         count_total = Presupuesto.objects.count()
     ticket_prom = total_acum / count_total if count_total else 0
     top_productos = ItemPresupuesto.objects.values('producto__codigo','producto__nombre').annotate(veces=Count('id')).order_by('-veces')[:5]
-    stock_bajo = Producto.objects.filter(stock__lte=3).order_by('stock')[:10]
+    try:
+        stock_bajo = Producto.objects.filter(stock__lte=3).order_by('stock')[:10]
+    except Exception:
+        stock_bajo = Producto.objects.filter(stock__lte=3).values('id','codigo','nombre','stock').order_by('stock')[:10]
     clientes_nuevos = Cliente.objects.order_by('-creado')[:5]
     categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
     ingresos_mes = MovimientoCaja.objects.filter(tipo='INGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
@@ -142,18 +145,33 @@ def api_caja_eliminar(request):
 
 @login_required
 def productos_view(request):
-    categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
-    return render(request, 'productos.html', {'categorias': categorias, 'count_productos': Producto.objects.count(), 'datos': DATOS_EMPRESA})
+    try:
+        categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
+        count_p = Producto.objects.count()
+    except Exception:
+        # fallback si falta columna
+        categorias = []
+        count_p = 0
+    return render(request, 'productos.html', {'categorias': categorias, 'count_productos': count_p, 'datos': DATOS_EMPRESA})
 
 @login_required
 def listas_view(request):
-    listas = ListaPrecio.objects.prefetch_related('items__producto').all().order_by('nombre')
+    try:
+        listas = ListaPrecio.objects.prefetch_related('items__producto').all().order_by('nombre')
+        # forzar evaluacion para detectar error de columna faltante antes de render
+        list(listas[:1])
+    except Exception:
+        # fallback sin prefetch de producto (evita SELECT * de Producto con columna nueva)
+        listas = ListaPrecio.objects.all().order_by('nombre')
     return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA})
 
 @login_required
 def presupuestos_view(request):
     presupuestos = Presupuesto.objects.select_related('cliente').prefetch_related('items__producto').order_by('-creado')[:100]
-    productos = Producto.objects.all().order_by('codigo')
+    try:
+        productos = Producto.objects.all().order_by('codigo')
+    except Exception:
+        productos = Producto.objects.values('id','codigo','nombre','precio','stock','categoria').order_by('codigo')
     clientes = Cliente.objects.all().order_by('-creado')[:100]
     listas = ListaPrecio.objects.all()
     total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
@@ -195,6 +213,17 @@ def api_buscar_productos(request):
         productos = productos.order_by('nombre')[:5000]
         data = []
         for p in productos:
+            # getattr seguro por si la columna aun no existe en DB
+            fecha_precio = None
+            fecha_stock = None
+            try:
+                fecha_precio = p.fecha_ultimo_cambio_precio.isoformat() if getattr(p, 'fecha_ultimo_cambio_precio', None) else None
+            except Exception:
+                fecha_precio = None
+            try:
+                fecha_stock = p.fecha_ultimo_cambio_stock.isoformat() if getattr(p, 'fecha_ultimo_cambio_stock', None) else None
+            except Exception:
+                fecha_stock = None
             data.append({
                 'id': p.id,
                 'codigo': p.codigo,
@@ -203,13 +232,36 @@ def api_buscar_productos(request):
                 'precio': float(p.precio),
                 'stock': p.stock,
                 'categoria': p.categoria or 'OTRO',
-                'fecha_ultimo_cambio_precio': p.fecha_ultimo_cambio_precio.isoformat() if getattr(p, 'fecha_ultimo_cambio_precio', None) else None,
-                'fecha_ultimo_cambio_stock': p.fecha_ultimo_cambio_stock.isoformat() if getattr(p, 'fecha_ultimo_cambio_stock', None) else None,
+                'fecha_ultimo_cambio_precio': fecha_precio,
+                'fecha_ultimo_cambio_stock': fecha_stock,
             })
         return JsonResponse(data, safe=False)
     except Exception as e:
-        import traceback; traceback.print_exc()
-        return JsonResponse([], safe=False)
+        # FALLBACK BLINDADO: si la DB aun no tiene las columnas nuevas, usar values() que no pide esas columnas
+        try:
+            productos = Producto.objects.all()
+            if cat != 'TODOS':
+                productos = productos.filter(categoria__iexact=cat)
+            if q:
+                productos = productos.filter(Q(codigo__icontains=q) | Q(nombre__icontains=q) | Q(barcode__icontains=q))
+            productos = productos.values('id','codigo','barcode','nombre','precio','stock','categoria').order_by('nombre')[:5000]
+            data = []
+            for p in productos:
+                data.append({
+                    'id': p['id'],
+                    'codigo': p['codigo'],
+                    'barcode': p['barcode'] or '',
+                    'nombre': p['nombre'],
+                    'precio': float(p['precio']),
+                    'stock': p['stock'],
+                    'categoria': p['categoria'] or 'OTRO',
+                    'fecha_ultimo_cambio_precio': None,
+                    'fecha_ultimo_cambio_stock': None,
+                })
+            return JsonResponse(data, safe=False)
+        except Exception as e2:
+            import traceback; traceback.print_exc()
+            return JsonResponse([], safe=False)
 
 @login_required
 @csrf_exempt
