@@ -106,6 +106,7 @@ class MovimientoCaja(models.Model):
     def __str__(self):
         return f"{self.tipo} - {self.concepto} ${self.monto}"
 
+# Estas tablas las usa el sistema multi-empresa, las dejamos tal cual estaban antes del blindaje
 class EmpresaCliente(models.Model):
     nombre = models.CharField(max_length=200)
     slug = models.SlugField(unique=True)

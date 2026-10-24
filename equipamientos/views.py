@@ -11,7 +11,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from .models import Cliente, Producto, Presupuesto, ItemPresupuesto, ListaPrecio, ItemListaPrecio, Venta, ItemVenta, MovimientoCaja, RegistroAcceso
-from django.db import transaction, connection
+from django.db import transaction
 
 DATOS_EMPRESA = {
     "whatsapp": "2983512672 / 3843400199",
@@ -34,52 +34,40 @@ def _log_accion(request, accion):
 
 @login_required
 def dashboard(request): 
-    try:
-        hoy = timezone.now()
-        hace_30 = hoy - timedelta(days=30)
-        ventas_qs = Venta.objects.select_related('cliente').order_by('-fecha_venta')
-        ventas_recientes = ventas_qs[:15]
-        presupuestos = Presupuesto.objects.select_related('cliente').order_by('-creado')[:10]
-        total_acum = ventas_qs.aggregate(Sum('total'))['total__sum'] or 0
-        total_mes = ventas_qs.filter(fecha_venta__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
-        count_mes = ventas_qs.filter(fecha_venta__gte=hace_30).count()
-        count_total = ventas_qs.count()
-        if count_total == 0:
-            total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
-            total_mes = Presupuesto.objects.filter(creado__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
-            count_mes = Presupuesto.objects.filter(creado__gte=hace_30).count()
-            count_total = Presupuesto.objects.count()
-        ticket_prom = total_acum / count_total if count_total else 0
-        top_productos = ItemPresupuesto.objects.values('producto__codigo','producto__nombre').annotate(veces=Count('id')).order_by('-veces')[:5]
-        try:
-            stock_bajo = Producto.objects.filter(stock__lte=3).order_by('stock')[:10]
-            list(stock_bajo[:1])
-        except Exception:
-            stock_bajo = []
-        clientes_nuevos = Cliente.objects.order_by('-creado')[:5]
-        try:
-            categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
-            list(categorias[:1])
-        except Exception:
-            categorias = []
-        ingresos_mes = MovimientoCaja.objects.filter(tipo='INGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
-        egresos_mes = MovimientoCaja.objects.filter(tipo='EGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
-        total_ingresos = MovimientoCaja.objects.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
-        total_egresos = MovimientoCaja.objects.filter(tipo='EGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
-        saldo_caja = total_ingresos - total_egresos
-        movimientos_caja = MovimientoCaja.objects.order_by('-fecha')[:10]
-        return render(request, 'dashboard.html', {
-            'total_acum': total_acum, 'total_mes': total_mes, 'count_mes': count_mes,
-            'count_total': count_total, 'ticket_prom': ticket_prom,
-            'presupuestos': presupuestos, 'ventas_recientes': ventas_recientes,
-            'top_productos': top_productos, 'stock_bajo': stock_bajo,
-            'clientes_nuevos': clientes_nuevos, 'categorias': categorias, 'datos': DATOS_EMPRESA,
-            'ingresos_mes': ingresos_mes, 'egresos_mes': egresos_mes,
-            'saldo_caja': saldo_caja, 'movimientos_caja': movimientos_caja
-        })
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return render(request, 'dashboard.html', {'total_acum':0,'total_mes':0,'count_mes':0,'count_total':0,'ticket_prom':0,'presupuestos':[],'ventas_recientes':[],'top_productos':[],'stock_bajo':[],'clientes_nuevos':[],'categorias':[],'datos':DATOS_EMPRESA,'ingresos_mes':0,'egresos_mes':0,'saldo_caja':0,'movimientos_caja':[]})
+    hoy = timezone.now()
+    hace_30 = hoy - timedelta(days=30)
+    ventas_qs = Venta.objects.select_related('cliente').order_by('-fecha_venta')
+    ventas_recientes = ventas_qs[:15]
+    presupuestos = Presupuesto.objects.select_related('cliente').order_by('-creado')[:10]
+    total_acum = ventas_qs.aggregate(Sum('total'))['total__sum'] or 0
+    total_mes = ventas_qs.filter(fecha_venta__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
+    count_mes = ventas_qs.filter(fecha_venta__gte=hace_30).count()
+    count_total = ventas_qs.count()
+    if count_total == 0:
+        total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
+        total_mes = Presupuesto.objects.filter(creado__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
+        count_mes = Presupuesto.objects.filter(creado__gte=hace_30).count()
+        count_total = Presupuesto.objects.count()
+    ticket_prom = total_acum / count_total if count_total else 0
+    top_productos = ItemPresupuesto.objects.values('producto__codigo','producto__nombre').annotate(veces=Count('id')).order_by('-veces')[:5]
+    stock_bajo = Producto.objects.filter(stock__lte=3).order_by('stock')[:10]
+    clientes_nuevos = Cliente.objects.order_by('-creado')[:5]
+    categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
+    ingresos_mes = MovimientoCaja.objects.filter(tipo='INGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
+    egresos_mes = MovimientoCaja.objects.filter(tipo='EGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
+    total_ingresos = MovimientoCaja.objects.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
+    total_egresos = MovimientoCaja.objects.filter(tipo='EGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
+    saldo_caja = total_ingresos - total_egresos
+    movimientos_caja = MovimientoCaja.objects.order_by('-fecha')[:10]
+    return render(request, 'dashboard.html', {
+        'total_acum': total_acum, 'total_mes': total_mes, 'count_mes': count_mes,
+        'count_total': count_total, 'ticket_prom': ticket_prom,
+        'presupuestos': presupuestos, 'ventas_recientes': ventas_recientes,
+        'top_productos': top_productos, 'stock_bajo': stock_bajo,
+        'clientes_nuevos': clientes_nuevos, 'categorias': categorias, 'datos': DATOS_EMPRESA,
+        'ingresos_mes': ingresos_mes, 'egresos_mes': egresos_mes,
+        'saldo_caja': saldo_caja, 'movimientos_caja': movimientos_caja
+    })
 
 @login_required
 def caja_view(request): 
@@ -154,56 +142,18 @@ def api_caja_eliminar(request):
 
 @login_required
 def productos_view(request):
-    try:
-        categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
-        list(categorias[:1])
-        count_p = Producto.objects.count()
-    except Exception:
-        # fallback crudo sin tocar Producto
-        categorias = []
-        count_p = 0
-        try:
-            with connection.cursor() as cur:
-                cur.execute("SELECT DISTINCT categoria FROM equipamientos_producto ORDER BY categoria")
-                categorias = [r[0] for r in cur.fetchall()]
-                cur.execute("SELECT COUNT(*) FROM equipamientos_producto")
-                count_p = cur.fetchone()[0]
-        except Exception:
-            pass
-    return render(request, 'productos.html', {'categorias': categorias, 'count_productos': count_p, 'datos': DATOS_EMPRESA})
+    categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
+    return render(request, 'productos.html', {'categorias': categorias, 'count_productos': Producto.objects.count(), 'datos': DATOS_EMPRESA})
 
 @login_required
 def listas_view(request):
-    # EMERGENCIA: si Producto tiene columnas faltantes, no crasheamos. Devolvemos listas sin productos
-    try:
-        listas = ListaPrecio.objects.prefetch_related('items__producto').all().order_by('nombre')
-        # probar una
-        for l in listas[:1]:
-            for it in l.items.all()[:1]:
-                _ = it.producto.codigo
-        return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA})
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        try:
-            # fallback sin producto
-            listas = ListaPrecio.objects.all().order_by('nombre')
-            return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA, 'error_fallback': str(e)})
-        except Exception:
-            return render(request, 'listas.html', {'listas': [], 'datos': DATOS_EMPRESA})
+    listas = ListaPrecio.objects.prefetch_related('items__producto').all().order_by('nombre')
+    return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA})
 
 @login_required
 def presupuestos_view(request):
-    try:
-        presupuestos = Presupuesto.objects.select_related('cliente').prefetch_related('items__producto').order_by('-creado')[:100]
-        productos = Producto.objects.all().order_by('codigo')
-        list(productos[:1])
-    except Exception:
-        presupuestos = Presupuesto.objects.select_related('cliente').order_by('-creado')[:100]
-        productos = Producto.objects.values('id','codigo','nombre','precio','stock','categoria').order_by('codigo') if False else []
-        try:
-            productos = Producto.objects.values('id','codigo','nombre','precio','stock','categoria').order_by('codigo')
-        except Exception:
-            productos = []
+    presupuestos = Presupuesto.objects.select_related('cliente').prefetch_related('items__producto').order_by('-creado')[:100]
+    productos = Producto.objects.all().order_by('codigo')
     clientes = Cliente.objects.all().order_by('-creado')[:100]
     listas = ListaPrecio.objects.all()
     total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
@@ -237,51 +187,27 @@ def api_buscar_productos(request):
     q = request.GET.get('q','').strip()
     cat = request.GET.get('cat','TODOS').strip().upper()
     try:
-        # Intento normal - si la columna fecha existe
         productos = Producto.objects.all()
         if cat != 'TODOS':
             productos = productos.filter(categoria__iexact=cat)
         if q:
             productos = productos.filter(Q(codigo__icontains=q) | Q(nombre__icontains=q) | Q(barcode__icontains=q))
-        productos = productos.order_by('nombre')[:5000]
+        productos = productos.order_by('codigo')[:5000]
         data = []
         for p in productos:
-            try:
-                fp = p.fecha_ultimo_cambio_precio.isoformat() if getattr(p,'fecha_ultimo_cambio_precio',None) else None
-            except: fp=None
-            try:
-                fs = p.fecha_ultimo_cambio_stock.isoformat() if getattr(p,'fecha_ultimo_cambio_stock',None) else None
-            except: fs=None
             data.append({
-                'id': p.id,'codigo': p.codigo,'barcode': p.barcode or '','nombre': p.nombre,
-                'precio': float(p.precio),'stock': p.stock,'categoria': p.categoria or 'OTRO',
-                'fecha_ultimo_cambio_precio': fp,'fecha_ultimo_cambio_stock': fs,
+                'id': p.id,
+                'codigo': p.codigo,
+                'barcode': p.barcode or '',
+                'nombre': p.nombre,
+                'precio': float(p.precio),
+                'stock': p.stock,
+                'categoria': p.categoria or 'OTRO',
             })
         return JsonResponse(data, safe=False)
     except Exception as e:
-        # FALLBACK SIN COLUMNAS NUEVAS - usa SQL directo que solo pide columnas viejas
-        try:
-            with connection.cursor() as cur:
-                sql = "SELECT id,codigo,COALESCE(barcode,''),nombre,precio,stock,COALESCE(categoria,'OTRO') FROM equipamientos_producto"
-                params=[]
-                where=[]
-                if cat!='TODOS':
-                    where.append("UPPER(categoria)=%s")
-                    params.append(cat)
-                if q:
-                    where.append("(codigo ILIKE %s OR nombre ILIKE %s OR barcode ILIKE %s)")
-                    like = f"%{q}%"
-                    params.extend([like,like,like])
-                if where:
-                    sql += " WHERE " + " AND ".join(where)
-                sql += " ORDER BY nombre ASC LIMIT 5000"
-                cur.execute(sql, params)
-                rows = cur.fetchall()
-                data=[{'id':r[0],'codigo':r[1],'barcode':r[2],'nombre':r[3],'precio':float(r[4]),'stock':r[5],'categoria':r[6],'fecha_ultimo_cambio_precio':None,'fecha_ultimo_cambio_stock':None} for r in rows]
-                return JsonResponse(data, safe=False)
-        except Exception as e2:
-            import traceback; traceback.print_exc()
-            return JsonResponse([], safe=False)
+        import traceback; traceback.print_exc()
+        return JsonResponse([], safe=False)
 
 @login_required
 @csrf_exempt
@@ -317,14 +243,6 @@ def api_guardar_producto(request):
         except: p.precio = 0
         try: p.stock = int(float(str(d.get('stock',0)).replace(',','.')))
         except: p.stock = 0
-        try:
-            if not es_nuevo and abs(float(p.precio)-float(precio_viejo))>0.01:
-                p.fecha_ultimo_cambio_precio = timezone.now()
-            if not es_nuevo and int(p.stock)!=int(stock_viejo):
-                p.fecha_ultimo_cambio_stock = timezone.now()
-            if es_nuevo and float(p.precio)>0:
-                p.fecha_ultimo_cambio_precio = timezone.now()
-        except: pass
         p.save()
         if not es_nuevo and (precio_viejo != float(p.precio) or stock_viejo != int(p.stock)):
             _log_accion(request, f"Cambio Producto {p.codigo}: precio {precio_viejo}->{p.precio} stock {stock_viejo}->{p.stock}")
@@ -356,6 +274,7 @@ def crear_presupuesto(request):
         return JsonResponse({'ok': True, 'codigo': codigo})
     return JsonResponse({'ok': False})
 
+# BLINDADO: Aplicar suba SOLO toca ItemListaPrecio, NO Producto.precio
 @login_required
 @csrf_exempt
 def modificar_lista(request):
@@ -365,6 +284,7 @@ def modificar_lista(request):
         porcentaje = float(data['porcentaje'])
         if porcentaje == 0: return JsonResponse({'ok': False, 'error': 'Porcentaje 0'})
         factor = 1 + (porcentaje/100)
+        # BACKUP implicito via log
         _log_accion(request, f"Aplicar suba {porcentaje}% a lista {lista.nombre} - SOLO lista, no pisa producto base")
         for item in lista.items.select_related('producto').all():
             precio_base = float(item.precio or item.producto.precio)
@@ -372,9 +292,11 @@ def modificar_lista(request):
             item.precio = nuevo
             item.precio_unitario = nuevo
             item.save()
+            # NO TOCAMOS item.producto.precio - BLINDADO
         return JsonResponse({'ok': True})
     return JsonResponse({'ok': False})
 
+# BLINDADO: Editar precio en lista SOLO toca ItemListaPrecio
 @login_required
 @csrf_exempt
 def editar_precio_item_lista(request):
@@ -389,6 +311,7 @@ def editar_precio_item_lista(request):
             item.precio_unitario = nuevo
             item.save()
             _log_accion(request, f"Edito precio en lista {item.lista.nombre} {item.producto.codigo}: {precio_viejo}->{nuevo} (NO pisa producto base)")
+            # NO TOCAMOS item.producto.precio - BLINDADO
             return JsonResponse({'ok': True, 'nuevo_precio': nuevo})
         except Exception as e:
             return JsonResponse({'ok': False, 'error': str(e)})
@@ -496,6 +419,311 @@ def api_caja_lista(request):
     movs = MovimientoCaja.objects.order_by('-fecha')[:100]
     data = [{'id': m.id, 'fecha': m.fecha.strftime('%d/%m %H:%M'), 'tipo': m.tipo, 'concepto': m.concepto, 'monto': float(m.monto), 'forma_pago': m.forma_pago} for m in movs]
     return JsonResponse(data, safe=False)
+
+@login_required
+def pdf_presupuesto(request, codigo):
+    pres = Presupuesto.objects.select_related('cliente').prefetch_related('items__producto').get(codigo=codigo)
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{codigo}.pdf"'
+    p = canvas.Canvas(response, pagesize=A4)
+    w, h = A4
+    d = DATOS_EMPRESA
+    p.setFillColorRGB(0.08,0.08,0.08)
+    p.rect(0, h-120, w, 120, fill=1, stroke=0)
+    try:
+        logo_path = os.path.join(settings.BASE_DIR, 'equipamientos', 'static', 'logo_halcon_circular.png')
+        if os.path.exists(logo_path):
+            p.drawImage(ImageReader(logo_path), 35, h-95, width=65, height=65, mask='auto')
+    except: pass
+    p.setFillColorRGB(1,1,1)
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(115, h-38, "HALCÓN EQUIPAMIENTOS")
+    p.setFont("Helvetica", 9)
+    p.setFillColorRGB(0.9,0.9,0.9)
+    p.drawString(115, h-52, f"{d['direccion']}")
+    p.drawString(115, h-64, f"WhatsApp: {d['whatsapp']}")
+    p.drawString(115, h-76, f"Instagram: @{d['instagram']}")
+    p.setFillColorRGB(1,0.84,0)
+    p.setFont("Helvetica-Bold", 11)
+    p.drawRightString(w-35, h-40, "PRESUPUESTO")
+    p.setFillColorRGB(1,1,1)
+    p.setFont("Helvetica-Bold", 15)
+    p.drawRightString(w-35, h-56, f"{pres.codigo}")
+    p.setFont("Helvetica", 9)
+    p.setFillColorRGB(0.8,0.8,0.8)
+    p.drawRightString(w-35, h-70, f"{pres.creado.strftime('%d/%m/%Y')} - Validez {d['validez']}")
+    p.setFillColorRGB(0.13,0.13,0.13)
+    p.roundRect(40, h-185, w-80, 55, 10, fill=1, stroke=0)
+    p.setFillColorRGB(1,0.55,0)
+    p.rect(40, h-185, 4, 55, fill=1, stroke=0)
+    p.setFillColorRGB(1,1,1)
+    p.setFont("Helvetica-Bold", 11)
+    p.drawString(60, h-160, f"CLIENTE: {pres.cliente.nombre.upper()}")
+    p.setFont("Helvetica", 9.5)
+    p.drawString(60, h-175, f"Tel: {pres.cliente.telefono} | Vehículo: {pres.vehiculo}")
+    y = h-225
+    p.setFillColorRGB(1,0.84,0)
+    p.rect(40, y-6, w-80, 22, fill=1, stroke=0)
+    p.setFillColorRGB(0,0,0)
+    p.setFont("Helvetica-Bold", 9)
+    p.drawString(45, y+2, "CODIGO")
+    p.drawString(120, y+2, "PRODUCTO")
+    p.drawString(380, y+2, "CANT")
+    p.drawString(420, y+2, "P.UNIT")
+    p.drawString(490, y+2, "SUBTOTAL")
+    y -= 25
+    for idx, it in enumerate(pres.items.all()):
+        if y < 150:
+            p.showPage()
+            y = h-50
+        if idx % 2 == 0:
+            p.setFillColorRGB(0.96,0.96,0.96)
+            p.rect(40, y-4, w-80, 16, fill=1, stroke=0)
+        p.setFillColorRGB(0,0,0)
+        p.setFont("Helvetica", 9)
+        nombre = it.producto.nombre[:52]
+        precio_u = getattr(it, 'precio_unitario', None) or getattr(it, 'precio', 0)
+        p.drawString(45, y, it.producto.codigo[:14])
+        p.drawString(120, y, nombre)
+        p.drawCentredString(390, y, str(it.cantidad))
+        p.drawRightString(460, y, f"${float(precio_u):,.0f}")
+        p.drawRightString(560, y, f"${float(it.cantidad*precio_u):,.0f}")
+        y -= 16
+    y -= 12
+    p.setStrokeColorRGB(0.8,0.8,0.8)
+    p.line(340, y, w-40, y)
+    y -= 18
+    p.setFont("Helvetica", 10)
+    p.setFillColorRGB(0,0,0)
+    p.drawRightString(460, y, "Subtotal:")
+    p.drawRightString(560, y, f"${float(pres.subtotal):,.0f}")
+    y -= 16
+    p.drawRightString(460, y, "Mano de obra / Instalación:")
+    p.drawRightString(560, y, f"${float(pres.colocacion):,.0f}")
+    y -= 26
+    p.setFillColorRGB(1,0.84,0)
+    p.roundRect(360, y-8, 200, 30, 8, fill=1, stroke=0)
+    p.setFillColorRGB(0,0,0)
+    p.setFont("Helvetica-Bold", 12)
+    p.drawRightString(550, y, f"TOTAL: ${float(pres.total):,.0f}")
+    y -= 45
+    p.setFont("Helvetica-Bold", 9)
+    p.setFillColorRGB(0,0,0)
+    p.drawString(40, y, f"Condiciones: {d['condiciones']}")
+    y -= 14
+    p.setFont("Helvetica", 8.5)
+    p.setFillColorRGB(0.3,0.3,0.3)
+    p.drawString(40, y, f"Alias: {d['alias']} | {d['direccion']}")
+    p.setFont("Helvetica-Bold", 8)
+    p.setFillColorRGB(0.5,0.5,0.5)
+    p.drawCentredString(w/2, 40, d['footer'])
+    p.showPage()
+    p.save()
+    return response
+
+@login_required
+@csrf_exempt
+def api_crear_lista(request):
+    if request.method == 'POST':
+        try:
+            d = json.loads(request.body)
+            nombre = d.get('nombre','').strip()
+            if not nombre:
+                return JsonResponse({'ok': False, 'error': 'Nombre vacío'})
+            if ListaPrecio.objects.filter(nombre__iexact=nombre).exists():
+                return JsonResponse({'ok': False, 'error': f'Ya existe una lista llamada {nombre}'})
+            lista = ListaPrecio.objects.create(nombre=nombre, porcentaje=0, activa=True)
+            return JsonResponse({'ok': True, 'id': lista.id, 'nombre': lista.nombre})
+        except Exception as e:
+            return JsonResponse({'ok': False, 'error': str(e)})
+    return JsonResponse({'ok': False, 'error': 'Método no permitido'})
+
+def _limpiar_precio_br(valor):
+    if valor is None: return 0
+    s = str(valor).strip()
+    if not s: return 0
+    s = s.replace("R$", "").replace("$", "").strip()
+    if "," in s and "." in s: s = s.replace(".", "").replace(",", ".")
+    elif "," in s: s = s.replace(",", ".")
+    try: return float(s)
+    except: return 0
+
+@login_required
+@csrf_exempt
+def api_eliminar_item_lista(request):
+    if request.method == 'POST':
+        try:
+            d = json.loads(request.body)
+            item_id = d.get('item_id')
+            if not item_id:
+                return JsonResponse({'ok': False, 'error': 'Falta item_id'})
+            ItemListaPrecio.objects.filter(id=item_id).delete()
+            return JsonResponse({'ok': True})
+        except Exception as e:
+            return JsonResponse({'ok': False, 'error': str(e)})
+    return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+
+@login_required
+@csrf_exempt
+def api_limpiar_duplicados_lista(request):
+    if request.method == 'POST':
+        try:
+            d = json.loads(request.body)
+            lista_id = d.get('lista_id')
+            lista = ListaPrecio.objects.get(id=lista_id)
+            vistos = {}
+            eliminados = 0
+            for item in lista.items.select_related('producto').order_by('-id'):
+                codigo = item.producto.codigo.strip().upper()
+                if codigo in vistos:
+                    item.delete()
+                    eliminados += 1
+                else:
+                    vistos[codigo] = True
+            return JsonResponse({'ok': True, 'eliminados': eliminados, 'quedan': len(vistos)})
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            return JsonResponse({'ok': False, 'error': str(e)})
+    return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+
+@login_required
+@csrf_exempt
+def api_actualizar_stock(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        d = json.loads(request.body)
+        producto_id = d.get('producto_id')
+        stock = int(d.get('stock', 0))
+        if stock < 0:
+            stock = 0
+        prod = Producto.objects.get(id=producto_id)
+        viejo = prod.stock
+        prod.stock = stock
+        prod.save()
+        _log_accion(request, f"Actualizo stock {prod.codigo}: {viejo}->{stock}")
+        return JsonResponse({'ok': True, 'stock': prod.stock})
+    except Producto.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Producto no existe'})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+@login_required
+@csrf_exempt
+def api_sincronizar_categorias(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        actualizados = 0
+        for lista in ListaPrecio.objects.prefetch_related('items__producto').all():
+            nombre_base = lista.nombre.split(' - ')[0].strip().upper()
+            if not nombre_base or nombre_base == 'OTRO':
+                continue
+            for item in lista.items.select_related('producto').all():
+                prod = item.producto
+                if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
+                    prod.categoria = nombre_base
+                    prod.save()
+                    actualizados += 1
+        return JsonResponse({'ok': True, 'actualizados': actualizados})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+# BLINDADO: Importar Excel SOLO crea/actualiza ItemListaPrecio, NO pisa Producto.precio ni nombre si ya existe
+@login_required
+@csrf_exempt
+def api_importar_lista_excel(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        if request.content_type == 'application/json':
+            data = json.loads(request.body)
+            items = data.get('items', [])
+            lista_id = data.get('lista_id')
+            nombre_nueva = data.get('nombre_nueva','').strip()
+            if lista_id == 'nueva':
+                if not nombre_nueva:
+                    return JsonResponse({'ok': False, 'error': 'Falta nombre de lista'})
+                lista, _ = ListaPrecio.objects.get_or_create(nombre__iexact=nombre_nueva, defaults={'nombre': nombre_nueva})
+            else:
+                lista = ListaPrecio.objects.get(id=lista_id)
+            nombre_base = lista.nombre.split(' - ')[0].strip().upper() or 'OTRO'
+            creados = 0
+            actualizados = 0
+            for row in items:
+                codigo = str(row.get('codigo','')).strip().upper()
+                if codigo.endswith('.0'): codigo = codigo[:-2]
+                nombre = str(row.get('nombre','')).strip() or codigo
+                try: precio = float(row.get('precio',0) or 0)
+                except: precio = 0
+                if not codigo or precio <= 0: continue
+                prod, created = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': nombre_base})
+                if created: 
+                    creados += 1
+                else:
+                    # BLINDADO: NO pisamos precio ni nombre si ya existe, solo categoria si es OTRO
+                    if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
+                        prod.categoria = nombre_base
+                        prod.save()
+                    actualizados += 1
+                ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
+            _log_accion(request, f"Importo {len(items)} a lista {lista.nombre}: creados {creados} actualizados {actualizados} - BLINDADO no pisa precio base")
+            return JsonResponse({'ok': True, 'lista_nombre': lista.nombre, 'creados': creados, 'actualizados': actualizados, 'total_lista': lista.items.count(), 'categoria_usada': nombre_base})
+        import openpyxl
+        lista_id = request.POST.get('lista_id')
+        archivo = request.FILES.get('archivo')
+        if not lista_id or not archivo:
+            return JsonResponse({'ok': False, 'error': 'Falta lista o archivo'})
+        lista = ListaPrecio.objects.get(id=lista_id)
+        nombre_base = lista.nombre.split(' - ')[0].strip().upper() or 'OTRO'
+        wb = openpyxl.load_workbook(archivo)
+        ws = wb.active
+        count = 0
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if not row or not row[0]: continue
+            codigo = str(row[0]).strip()
+            if codigo.endswith('.0'): codigo = codigo[:-2]
+            nombre = str(row[1]).strip() if len(row) > 1 and row[1] else codigo
+            precio = _limpiar_precio_br(row[2]) if len(row) > 2 else 0
+            if precio <= 0: continue
+            prod, _ = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': nombre_base})
+            # BLINDADO: no pisamos precio base
+            if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
+                if prod.categoria != nombre_base:
+                    prod.categoria = nombre_base
+                    prod.save()
+            ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
+            count += 1
+        _log_accion(request, f"Importo Excel a {lista.nombre}: {count} - BLINDADO")
+        return JsonResponse({'ok': True, 'importados': count, 'categoria_usada': nombre_base})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+@login_required
+@csrf_exempt
+def api_exportar_lista_excel(request):
+    try:
+        import openpyxl
+        from io import BytesIO
+        lista_id = request.GET.get('lista_id')
+        lista = ListaPrecio.objects.get(id=lista_id)
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = lista.nombre[:30]
+        ws.append(["CODIGO", "NOMBRE", "PRECIO", "STOCK"])
+        for item in lista.items.select_related('producto').all():
+            ws.append([item.producto.codigo, item.producto.nombre, float(item.precio), item.producto.stock])
+        bio = BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+        response = HttpResponse(bio.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="{lista.nombre}.xlsx"'
+        return response
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)})
 
 @login_required
 @csrf_exempt
@@ -634,10 +862,6 @@ def api_aplicar_suba_categoria(request):
             nuevo=round(viejo*factor,2)
             if nuevo<=0: continue
             p.precio=nuevo
-            try:
-                p.fecha_ultimo_cambio_precio = timezone.now()
-            except:
-                pass
             p.save()
             actualizados+=1
         _log_accion(request, f"Aplico suba {porcentaje}% a categoria {categoria}: {actualizados} productos")
@@ -662,10 +886,6 @@ def api_actualizar_precio(request):
             return JsonResponse({'ok': False, 'error': 'Datos invalidos'})
         prod = Producto.objects.get(id=pid)
         prod.precio = nuevo
-        try:
-            prod.fecha_ultimo_cambio_precio = timezone.now()
-        except:
-            pass
         prod.save()
         _log_accion(request, f"Cambio precio directo {prod.codigo} a {nuevo}")
         return JsonResponse({'ok': True, 'precio': float(prod.precio), 'id': prod.id})
@@ -675,223 +895,3 @@ def api_actualizar_precio(request):
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
 
-@login_required
-@csrf_exempt
-def api_actualizar_stock(request):
-    if request.method != 'POST':
-        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
-    try:
-        d = json.loads(request.body)
-        producto_id = d.get('producto_id')
-        stock = int(d.get('stock', 0))
-        if stock < 0:
-            stock = 0
-        prod = Producto.objects.get(id=producto_id)
-        viejo = prod.stock
-        prod.stock = stock
-        try:
-            if viejo != stock:
-                prod.fecha_ultimo_cambio_stock = timezone.now()
-        except:
-            pass
-        prod.save()
-        _log_accion(request, f"Actualizo stock {prod.codigo}: {viejo}->{stock}")
-        return JsonResponse({'ok': True, 'stock': prod.stock})
-    except Producto.DoesNotExist:
-        return JsonResponse({'ok': False, 'error': 'Producto no existe'})
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return JsonResponse({'ok': False, 'error': str(e)})
-
-@login_required
-@csrf_exempt
-def api_sincronizar_categorias(request):
-    if request.method != 'POST':
-        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
-    try:
-        actualizados = 0
-        for lista in ListaPrecio.objects.prefetch_related('items__producto').all():
-            nombre_base = lista.nombre.split(' - ')[0].strip().upper()
-            if not nombre_base or nombre_base == 'OTRO':
-                continue
-            for item in lista.items.select_related('producto').all():
-                prod = item.producto
-                if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
-                    prod.categoria = nombre_base
-                    prod.save()
-                    actualizados += 1
-        return JsonResponse({'ok': True, 'actualizados': actualizados})
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return JsonResponse({'ok': False, 'error': str(e)})
-
-@login_required
-@csrf_exempt
-def api_importar_lista_excel(request):
-    if request.method != 'POST':
-        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
-    try:
-        if request.content_type == 'application/json':
-            data = json.loads(request.body)
-            items = data.get('items', [])
-            lista_id = data.get('lista_id')
-            nombre_nueva = data.get('nombre_nueva','').strip()
-            if lista_id == 'nueva':
-                if not nombre_nueva:
-                    return JsonResponse({'ok': False, 'error': 'Falta nombre de lista'})
-                lista, _ = ListaPrecio.objects.get_or_create(nombre__iexact=nombre_nueva, defaults={'nombre': nombre_nueva})
-            else:
-                lista = ListaPrecio.objects.get(id=lista_id)
-            nombre_base = lista.nombre.split(' - ')[0].strip().upper() or 'OTRO'
-            creados = 0
-            actualizados = 0
-            for row in items:
-                codigo = str(row.get('codigo','')).strip().upper()
-                if codigo.endswith('.0'): codigo = codigo[:-2]
-                nombre = str(row.get('nombre','')).strip() or codigo
-                try: precio = float(row.get('precio',0) or 0)
-                except: precio = 0
-                if not codigo or precio <= 0: continue
-                prod, created = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': nombre_base})
-                if created: 
-                    creados += 1
-                else:
-                    if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
-                        prod.categoria = nombre_base
-                        prod.save()
-                    actualizados += 1
-                ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
-            _log_accion(request, f"Importo {len(items)} a lista {lista.nombre}: creados {creados} actualizados {actualizados} - BLINDADO no pisa precio base")
-            return JsonResponse({'ok': True, 'lista_nombre': lista.nombre, 'creados': creados, 'actualizados': actualizados, 'total_lista': lista.items.count(), 'categoria_usada': nombre_base})
-        import openpyxl
-        lista_id = request.POST.get('lista_id')
-        archivo = request.FILES.get('archivo')
-        if not lista_id or not archivo:
-            return JsonResponse({'ok': False, 'error': 'Falta lista o archivo'})
-        lista = ListaPrecio.objects.get(id=lista_id)
-        nombre_base = lista.nombre.split(' - ')[0].strip().upper() or 'OTRO'
-        wb = openpyxl.load_workbook(archivo)
-        ws = wb.active
-        count = 0
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row or not row[0]: continue
-            codigo = str(row[0]).strip()
-            if codigo.endswith('.0'): codigo = codigo[:-2]
-            nombre = str(row[1]).strip() if len(row) > 1 and row[1] else codigo
-            precio = float(row[2]) if len(row) > 2 else 0
-            if precio <= 0: continue
-            prod, _ = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': nombre_base})
-            if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
-                if prod.categoria != nombre_base:
-                    prod.categoria = nombre_base
-                    prod.save()
-            ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
-            count += 1
-        _log_accion(request, f"Importo Excel a {lista.nombre}: {count} - BLINDADO")
-        return JsonResponse({'ok': True, 'importados': count, 'categoria_usada': nombre_base})
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return JsonResponse({'ok': False, 'error': str(e)})
-
-@login_required
-@csrf_exempt
-def api_exportar_lista_excel(request):
-    try:
-        import openpyxl
-        from io import BytesIO
-        lista_id = request.GET.get('lista_id')
-        lista = ListaPrecio.objects.get(id=lista_id)
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = lista.nombre[:30]
-        ws.append(["CODIGO", "NOMBRE", "PRECIO", "STOCK"])
-        for item in lista.items.select_related('producto').all():
-            ws.append([item.producto.codigo, item.producto.nombre, float(item.precio), item.producto.stock])
-        bio = BytesIO()
-        wb.save(bio)
-        bio.seek(0)
-        response = HttpResponse(bio.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        response['Content-Disposition'] = f'attachment; filename="{lista.nombre}.xlsx"'
-        return response
-    except Exception as e:
-        return JsonResponse({'ok': False, 'error': str(e)})
-
-@login_required
-@csrf_exempt
-def api_crear_lista(request):
-    if request.method == 'POST':
-        try:
-            d = json.loads(request.body)
-            nombre = d.get('nombre','').strip()
-            if not nombre:
-                return JsonResponse({'ok': False, 'error': 'Nombre vacío'})
-            if ListaPrecio.objects.filter(nombre__iexact=nombre).exists():
-                return JsonResponse({'ok': False, 'error': f'Ya existe una lista llamada {nombre}'})
-            lista = ListaPrecio.objects.create(nombre=nombre, porcentaje=0, activa=True)
-            return JsonResponse({'ok': True, 'id': lista.id, 'nombre': lista.nombre})
-        except Exception as e:
-            return JsonResponse({'ok': False, 'error': str(e)})
-    return JsonResponse({'ok': False, 'error': 'Método no permitido'})
-
-def _limpiar_precio_br(valor):
-    if valor is None: return 0
-    s = str(valor).strip()
-    if not s: return 0
-    s = s.replace("R$", "").replace("$", "").strip()
-    if "," in s and "." in s: s = s.replace(".", "").replace(",", ".")
-    elif "," in s: s = s.replace(",", ".")
-    try: return float(s)
-    except: return 0
-
-@login_required
-@csrf_exempt
-def api_eliminar_item_lista(request):
-    if request.method == 'POST':
-        try:
-            d = json.loads(request.body)
-            item_id = d.get('item_id')
-            if not item_id:
-                return JsonResponse({'ok': False, 'error': 'Falta item_id'})
-            ItemListaPrecio.objects.filter(id=item_id).delete()
-            return JsonResponse({'ok': True})
-        except Exception as e:
-            return JsonResponse({'ok': False, 'error': str(e)})
-    return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
-
-@login_required
-@csrf_exempt
-def api_limpiar_duplicados_lista(request):
-    if request.method == 'POST':
-        try:
-            d = json.loads(request.body)
-            lista_id = d.get('lista_id')
-            lista = ListaPrecio.objects.get(id=lista_id)
-            vistos = {}
-            eliminados = 0
-            for item in lista.items.select_related('producto').order_by('-id'):
-                codigo = item.producto.codigo.strip().upper()
-                if codigo in vistos:
-                    item.delete()
-                    eliminados += 1
-                else:
-                    vistos[codigo] = True
-            return JsonResponse({'ok': True, 'eliminados': eliminados, 'quedan': len(vistos)})
-        except Exception as e:
-            import traceback; traceback.print_exc()
-            return JsonResponse({'ok': False, 'error': str(e)})
-    return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
-
-@login_required
-@csrf_exempt
-def api_cambiar_password(request):
-    if request.method == 'POST':
-        try:
-            d = json.loads(request.body)
-            from django.contrib.auth.models import User
-            user = User.objects.get(username='cliente')
-            user.set_password(d.get('nueva', 'halcon123'))
-            user.save()
-            return JsonResponse({'ok': True})
-        except Exception as e:
-            return JsonResponse({'ok': False, 'error': str(e)})
-    return JsonResponse({'ok': False})
