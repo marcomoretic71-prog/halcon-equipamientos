@@ -29,7 +29,6 @@
   </div>
 </nav>
 <div class="max-w-[1600px] mx-auto p-4 md:p-6">
-  <!-- BLOQUE SUPERIOR QUE QUERIAS MANTENER -->
   <div class="bg-[#151515] border border-[#262626] rounded-[16px] p-4 md:p-5">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-sm text-zinc-400">📦 Catálogo - <span id="result-count">0</span> productos | <span id="result-count2">0</span> filtrados <span id="badge-cat" class="ml-2 bg-[#1a1a1a] border border-[#333] px-2 py-0.5 rounded-full text-[10px]">TODOS</span></h2>
@@ -62,7 +61,6 @@
       <input id="busc" autocomplete="off" placeholder="🔍 Buscar por código, nombre o código de barras..." class="w-full bg-[#0a0a0a] border-2 border-[#2a2a2a] rounded-full px-5 py-3.5 text-sm outline-none focus:border-[#facc15] placeholder:text-zinc-600">
     </div>
   </div>
-  <!-- NUEVA VISTA ACORDEON POR CATEGORIA COMO LISTAS -->
   <div id="acordeones" class="flex flex-col gap-4 mt-6">
     <div class="text-center py-20 text-zinc-500 text-sm">Cargando productos...</div>
   </div>
@@ -72,10 +70,20 @@ let todosProductos = [];
 let catActual = 'TODOS';
 function formatARS(n){ return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS'}).format(n||0); }
 function getCSRF(){ const m=document.cookie.match(/csrftoken=([^;]+)/); return m?m[1]:''; }
+function formatearFechaISO(iso){
+  if(!iso) return '';
+  try{
+    let d = new Date(iso);
+    if(isNaN(d.getTime())) return '';
+    return `🕒 ${d.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}`;
+  }catch(e){ return ''; }
+}
 async function cargarTodos(){
   try{
     let res = await fetch(`/api/buscar_productos/?q=&cat=TODOS`);
     let data = await res.json();
+    // A-Z por nombre desde el front también por seguridad
+    data = data.sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es', {sensitivity:'base'}));
     todosProductos = data;
     document.getElementById('result-count').textContent = data.length;
     filtrarInstantaneo();
@@ -97,6 +105,8 @@ function filtrarInstantaneo(){
              (p.barcode||'').toLowerCase().includes(q);
     });
   }
+  // A-Z
+  filtrados = filtrados.sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es', {sensitivity:'base'}));
   document.getElementById('result-count2').textContent = filtrados.length;
   document.getElementById('badge-cat').textContent = catActual;
   renderAcordeones(filtrados);
@@ -107,17 +117,16 @@ function renderAcordeones(data){
     cont.innerHTML = `<div class="text-center py-16 bg-[#151515] border border-[#262626] rounded-[16px]"><div class="text-sm text-zinc-400">No se encontró "${document.getElementById('busc').value}"</div></div>`;
     return;
   }
-  // agrupar por categoria
   const grupos = {};
   data.forEach(p=>{
     let cat = (p.categoria||'OTRO').toUpperCase();
     if(!grupos[cat]) grupos[cat]=[];
     grupos[cat].push(p);
   });
-  const catsOrdenadas = Object.keys(grupos).sort();
+  const catsOrdenadas = Object.keys(grupos).sort((a,b)=> a.localeCompare(b, 'es', {sensitivity:'base'}));
   cont.innerHTML='';
   catsOrdenadas.forEach(cat=>{
-    const prods = grupos[cat].sort((a,b)=> a.codigo.localeCompare(b.codigo));
+    const prods = grupos[cat].sort((a,b)=> a.nombre.localeCompare(b.nombre, 'es', {sensitivity:'base'}));
     const catId = cat.replace(/[^A-Z0-9]/g,'_');
     const div = document.createElement('div');
     div.className='bg-[#151515] border border-[#262626] rounded-[16px] overflow-hidden w-full';
@@ -126,8 +135,8 @@ function renderAcordeones(data){
         <button onclick="toggleCat('${catId}')" class="flex items-center gap-4 text-left flex-1">
           <div class="w-11 h-11 rounded-full bg-[#facc15]/15 text-[#facc15] flex items-center justify-center font-black text-[14px]">${prods.length}</div>
           <div>
-            <div class="font-black text-[13px] uppercase tracking-wide">${cat} - ${prods.length} PRODUCTOS</div>
-            <div class="text-[11px] text-zinc-500 mt-0.5">Click para desplegar • Stock y precios editables</div>
+            <div class="font-black text-[13px] uppercase tracking-wide">${cat} - ${prods.length} PRODUCTOS • A-Z</div>
+            <div class="text-[11px] text-zinc-500 mt-0.5">Click para desplegar • Ordenado A-Z por nombre</div>
           </div>
           <span id="arrow-${catId}" class="text-zinc-500 ml-4">▼</span>
         </button>
@@ -149,12 +158,14 @@ function renderAcordeones(data){
                 <th class="text-left p-3 w-[120px]">Código</th>
                 <th class="text-left p-3">Producto</th>
                 <th class="text-center p-3 w-[170px]">Stock</th>
-                <th class="text-right p-3 w-[150px]">Precio</th>
+                <th class="text-right p-3 w-[180px]">Precio</th>
                 <th class="p-3 w-[160px] text-right">Acción</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-[#1e1e1e]">
-              ${prods.map(p=>`
+              ${prods.map(p=>{
+                let fechaTxt = formatearFechaISO(p.fecha_ultimo_cambio_precio);
+                return `
                 <tr class="hover:bg-[#1e1e1e]/50">
                   <td class="p-3 text-zinc-500 font-mono text-[11px]">${p.codigo} ${p.barcode?`<div class="text-[9px] text-[#facc15]">${p.barcode}</div>`:''}</td>
                   <td class="p-3 text-zinc-300"><div class="max-w-[600px] truncate" title="${p.nombre}">${p.nombre}</div><div class="text-[10px] text-zinc-500">${p.categoria}</div></td>
@@ -173,7 +184,10 @@ function renderAcordeones(data){
                         onblur="guardarPrecioDirecto(${p.id})"
                         class="precio-input bg-[#0f0f0f] border border-[#333] rounded-lg px-2 py-1.5 w-[115px] text-right outline-none focus:border-[#facc15] font-bold text-[#facc15] text-[12px]">
                     </div>
-                    <div id="precio-status-${p.id}" class="text-[9px] text-green-400 hidden mt-0.5">✓ guardado</div>
+                    <div class="flex flex-col items-end">
+                      <div id="precio-status-${p.id}" class="text-[9px] text-green-400 hidden mt-0.5">✓ guardado</div>
+                      ${fechaTxt ? `<div class="text-[9px] text-zinc-500 mt-1">${fechaTxt}</div>` : `<div class="text-[9px] text-zinc-600 mt-1">sin cambios aún</div>`}
+                    </div>
                   </td>
                   <td class="p-3 text-right">
                     <div class="flex gap-1 justify-end">
@@ -183,7 +197,7 @@ function renderAcordeones(data){
                     </div>
                   </td>
                 </tr>
-              `).join('')}
+              `}).join('')}
             </tbody>
           </table>
         </div>
@@ -191,7 +205,6 @@ function renderAcordeones(data){
     `;
     cont.appendChild(div);
   });
-  // abrir primer categoria automaticamente si hay pocas
   if(catsOrdenadas.length<=3){
     catsOrdenadas.forEach(cat=>{
       const catId = cat.replace(/[^A-Z0-9]/g,'_');
@@ -214,7 +227,6 @@ function toggleAllProductos(open){
   });
   document.querySelectorAll('[id^=arrow-]').forEach(a=>a.textContent=open?'▲':'▼');
 }
-// stock
 function cambiarStockProducto(id, delta){
   const inp=document.getElementById('stock-'+id);
   let actual=parseInt(inp.value)||0;
@@ -246,9 +258,7 @@ function guardarStockDirecto(id){
 }
 function parsePrecioInput(s){
   if(!s) return 0;
-  // permite 250000, 250.000, 250.000,00, 212.500,00
   s = s.toString().trim().replace(/\$/g,'').replace(/\s/g,'');
-  // si tiene coma, asumimos formato AR: 212.500,00 -> 212500.00
   if(s.includes(',')){
     s = s.replace(/\./g,'').replace(',','.');
   }
@@ -259,7 +269,6 @@ function guardarPrecioDirecto(id){
   const status=document.getElementById('precio-status-'+id);
   let nuevo=parsePrecioInput(inp.value);
   if(nuevo<=0) return;
-  // evitar guardado repetido si no cambió
   let prod = todosProductos.find(x=>x.id===id);
   if(prod && Math.abs(parseFloat(prod.precio)-nuevo)<0.01){
     return;
@@ -276,6 +285,11 @@ function guardarPrecioDirecto(id){
       inp.style.borderColor='#22c55e';
       if(status){ status.classList.remove('hidden'); setTimeout(()=>status.classList.add('hidden'), 2000); }
       setTimeout(()=>inp.style.borderColor='#333',1000);
+      // actualizar fecha local
+      if(prod){
+        prod.fecha_ultimo_cambio_precio = new Date().toISOString();
+        filtrarInstantaneo();
+      }
     } else {
       alert('Error: '+(d.error||''));
       inp.style.borderColor='#ef4444';
@@ -295,7 +309,7 @@ function mostrarDetalleEscaneado(codigo){
       <div class="flex-1">
         <div class="text-[11px] text-zinc-500 font-mono">${p.codigo} ${p.barcode ? '• 📷 '+p.barcode : ''}</div>
         <div class="text-lg font-bold text-white mt-1">${p.nombre}</div>
-        <div class="text-sm text-zinc-400 mt-1">${p.categoria||''}</div>
+        <div class="text-sm text-zinc-400 mt-1">${p.categoria||''} ${p.fecha_ultimo_cambio_precio ? '• '+formatearFechaISO(p.fecha_ultimo_cambio_precio) : ''}</div>
         <div class="flex gap-2 mt-3">
           <span class="bg-[#facc15] text-black font-black px-4 py-1.5 rounded-full text-sm">${formatARS(p.precio)}</span>
           <span class="bg-[#1e1e1e] border border-[#333] px-4 py-1.5 rounded-full text-xs">Stock: ${p.stock}</span>
@@ -325,7 +339,6 @@ async function handleBarcodeScan(code){
     document.getElementById('busc').value = code;
     filtrarInstantaneo();
     mostrarDetalleEscaneado(p.codigo);
-    // abrir categoria de ese producto
     let catId = (p.categoria||'OTRO').toUpperCase().replace(/[^A-Z0-9]/g,'_');
     let body = document.getElementById('body-'+catId);
     if(body && body.classList.contains('hidden')) toggleCat(catId);
@@ -357,7 +370,7 @@ async function handleBarcodeScan(code){
   document.getElementById('barcode_scanner').focus();
 }
 function eliminarProductoDefinitivo(id, codigo){
-  if(!confirm(`¿Eliminar DEFINITIVO ${codigo}?\n\nSe borrará de PRODUCTOS y de todas las LISTAS.\nEsta acción no se puede deshacer.`)) return;
+  if(!confirm(`¿Eliminar DEFINITIVO ${codigo}?\n\nSe borrará de PRODUCTOS y de todas las LISTAS.`)) return;
   if(!confirm(`Última confirmación: ¿Borrar ${codigo} para siempre?`)) return;
   fetch(`/api/eliminar_producto/${id}/`, { method: 'POST', headers: { 'X-CSRFToken': getCSRF() } })
   .then(r=>r.json())
@@ -370,7 +383,7 @@ function eliminarProductoDefinitivo(id, codigo){
   });
 }
 function limpiarDuplicadosGlobal(){
-  if(!confirm('¿Limpiar todos los productos con .0 duplicados?\n\nEsto suma el stock y borra el duplicado.')) return;
+  if(!confirm('¿Limpiar todos los productos con .0 duplicados?')) return;
   fetch('/api/limpiar_duplicados_global/', { method:'POST', headers:{'X-CSRFToken': getCSRF()} })
   .then(r=>r.json()).then(d=>{ if(d.ok){ alert(`✅ Se limpiaron ${d.borrados} duplicados`); cargarTodos(); } else alert('Error: '+d.error); });
 }
@@ -401,7 +414,7 @@ async function aplicarSubaCategoria(categoria, catId){
   const status = document.getElementById('status-'+catId);
   let pct = parseFloat(pctInput.value);
   if(!pct || pct===0){ alert('Poné un % válido'); return; }
-  if(!confirm(`¿Aplicar ${pct}% de aumento a TODA la categoría ${categoria}?\n\nEsto cambia el precio base de venta en Productos. No se puede deshacer fácil.`)) return;
+  if(!confirm(`¿Aplicar ${pct}% de aumento a TODA la categoría ${categoria}?`)) return;
   status.classList.remove('hidden');
   status.textContent = `Aplicando ${pct}% a ${categoria}...`;
   try{
@@ -430,19 +443,16 @@ async function guardarCambiosCategoria(catId){
   status.classList.remove('hidden');
   status.textContent = `💾 Guardando cambios de esta categoría...`;
   status.className = 'bg-[#facc15]/10 border-b border-[#facc15]/20 text-[11px] text-[#facc15] px-4 py-2';
-  
-  // juntar todos los precios y stocks de esta categoria
   const inputsPrecio = body.querySelectorAll("input[id^='precio-']");
   const inputsStock = body.querySelectorAll("input[id^='stock-']");
   let cambios = 0;
   let errores = 0;
-  // guardar precios
   for(let inp of inputsPrecio){
     let id = parseInt(inp.id.replace('precio-',''));
     let nuevo = parsePrecioInput(inp.value);
     if(nuevo<=0) continue;
     let prod = todosProductos.find(x=>x.id===id);
-    if(prod && Math.abs(parseFloat(prod.precio)-nuevo)<0.01) continue; // no cambió
+    if(prod && Math.abs(parseFloat(prod.precio)-nuevo)<0.01) continue;
     try{
       let res = await fetch('/api/actualizar_precio/',{
         method:'POST',
@@ -457,7 +467,6 @@ async function guardarCambiosCategoria(catId){
       } else errores++;
     } catch(e){ errores++; }
   }
-  // guardar stocks (por si cambió alguno a mano sin usar - +)
   for(let inp of inputsStock){
     let id = parseInt(inp.id.replace('stock-',''));
     let nuevo = parseInt(inp.value)||0;
@@ -477,10 +486,10 @@ async function guardarCambiosCategoria(catId){
     } catch(e){ errores++; }
   }
   if(errores===0){
-    status.textContent = `✅ ${cambios} cambios guardados correctamente en Postgres. No se borran nunca más.`;
+    status.textContent = `✅ ${cambios} cambios guardados en Postgres.`;
     status.className = 'bg-[#22c55e]/20 border-b border-[#22c55e]/30 text-[11px] text-[#4ade80] px-4 py-2';
   } else {
-    status.textContent = `⚠️ ${cambios} guardados, ${errores} con error. Revisá los precios.`;
+    status.textContent = `⚠ ${cambios} guardados, ${errores} con error.`;
     status.className = 'bg-red-500/20 border-b border-red-500/30 text-[11px] text-red-400 px-4 py-2';
   }
   setTimeout(()=>{ status.classList.add('hidden'); }, 5000);
