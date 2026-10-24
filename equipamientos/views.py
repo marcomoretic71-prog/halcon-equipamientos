@@ -34,43 +34,70 @@ def _log_accion(request, accion):
 
 @login_required
 def dashboard(request): 
-    hoy = timezone.now()
-    hace_30 = hoy - timedelta(days=30)
-    ventas_qs = Venta.objects.select_related('cliente').order_by('-fecha_venta')
-    ventas_recientes = ventas_qs[:15]
-    presupuestos = Presupuesto.objects.select_related('cliente').order_by('-creado')[:10]
-    total_acum = ventas_qs.aggregate(Sum('total'))['total__sum'] or 0
-    total_mes = ventas_qs.filter(fecha_venta__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
-    count_mes = ventas_qs.filter(fecha_venta__gte=hace_30).count()
-    count_total = ventas_qs.count()
-    if count_total == 0:
-        total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
-        total_mes = Presupuesto.objects.filter(creado__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
-        count_mes = Presupuesto.objects.filter(creado__gte=hace_30).count()
-        count_total = Presupuesto.objects.count()
-    ticket_prom = total_acum / count_total if count_total else 0
-    top_productos = ItemPresupuesto.objects.values('producto__codigo','producto__nombre').annotate(veces=Count('id')).order_by('-veces')[:5]
     try:
-        stock_bajo = Producto.objects.filter(stock__lte=3).order_by('stock')[:10]
-    except Exception:
-        stock_bajo = Producto.objects.filter(stock__lte=3).values('id','codigo','nombre','stock').order_by('stock')[:10]
-    clientes_nuevos = Cliente.objects.order_by('-creado')[:5]
-    categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
-    ingresos_mes = MovimientoCaja.objects.filter(tipo='INGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
-    egresos_mes = MovimientoCaja.objects.filter(tipo='EGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
-    total_ingresos = MovimientoCaja.objects.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
-    total_egresos = MovimientoCaja.objects.filter(tipo='EGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
-    saldo_caja = total_ingresos - total_egresos
-    movimientos_caja = MovimientoCaja.objects.order_by('-fecha')[:10]
-    return render(request, 'dashboard.html', {
-        'total_acum': total_acum, 'total_mes': total_mes, 'count_mes': count_mes,
-        'count_total': count_total, 'ticket_prom': ticket_prom,
-        'presupuestos': presupuestos, 'ventas_recientes': ventas_recientes,
-        'top_productos': top_productos, 'stock_bajo': stock_bajo,
-        'clientes_nuevos': clientes_nuevos, 'categorias': categorias, 'datos': DATOS_EMPRESA,
-        'ingresos_mes': ingresos_mes, 'egresos_mes': egresos_mes,
-        'saldo_caja': saldo_caja, 'movimientos_caja': movimientos_caja
-    })
+        hoy = timezone.now()
+        hace_30 = hoy - timedelta(days=30)
+        ventas_qs = Venta.objects.select_related('cliente').order_by('-fecha_venta')
+        ventas_recientes = list(ventas_qs[:15])
+        presupuestos = list(Presupuesto.objects.select_related('cliente').order_by('-creado')[:10])
+        total_acum = ventas_qs.aggregate(Sum('total'))['total__sum'] or 0
+        total_mes = ventas_qs.filter(fecha_venta__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
+        count_mes = ventas_qs.filter(fecha_venta__gte=hace_30).count()
+        count_total = ventas_qs.count()
+        if count_total == 0:
+            total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
+            total_mes = Presupuesto.objects.filter(creado__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
+            count_mes = Presupuesto.objects.filter(creado__gte=hace_30).count()
+            count_total = Presupuesto.objects.count()
+        ticket_prom = total_acum / count_total if count_total else 0
+        try:
+            top_productos = list(ItemPresupuesto.objects.values('producto__codigo','producto__nombre').annotate(veces=Count('id')).order_by('-veces')[:5])
+        except Exception:
+            top_productos = []
+        try:
+            stock_bajo = list(Producto.objects.filter(stock__lte=3).order_by('stock')[:10])
+        except Exception:
+            try:
+                stock_bajo = list(Producto.objects.filter(stock__lte=3).values('id','codigo','nombre','stock').order_by('stock')[:10])
+            except Exception:
+                stock_bajo = []
+        try:
+            clientes_nuevos = list(Cliente.objects.order_by('-creado')[:5])
+        except Exception:
+            clientes_nuevos = []
+        try:
+            categorias = list(Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria'))
+        except Exception:
+            categorias = []
+        ingresos_mes = MovimientoCaja.objects.filter(tipo='INGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
+        egresos_mes = MovimientoCaja.objects.filter(tipo='EGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
+        total_ingresos = MovimientoCaja.objects.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
+        total_egresos = MovimientoCaja.objects.filter(tipo='EGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
+        saldo_caja = total_ingresos - total_egresos
+        movimientos_caja = list(MovimientoCaja.objects.order_by('-fecha')[:10])
+        return render(request, 'dashboard.html', {
+            'total_acum': total_acum, 'total_mes': total_mes, 'count_mes': count_mes,
+            'count_total': count_total, 'ticket_prom': ticket_prom,
+            'presupuestos': presupuestos, 'ventas_recientes': ventas_recientes,
+            'top_productos': top_productos, 'stock_bajo': stock_bajo,
+            'clientes_nuevos': clientes_nuevos, 'categorias': categorias, 'datos': DATOS_EMPRESA,
+            'ingresos_mes': ingresos_mes, 'egresos_mes': egresos_mes,
+            'saldo_caja': saldo_caja, 'movimientos_caja': movimientos_caja
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        # fallback minimo para que Inicio nunca tire 500
+        return render(request, 'dashboard.html', {
+            'total_acum': 0, 'total_mes': 0, 'count_mes': 0,
+            'count_total': 0, 'ticket_prom': 0,
+            'presupuestos': [], 'ventas_recientes': [],
+            'top_productos': [], 'stock_bajo': [],
+            'clientes_nuevos': [], 'categorias': [], 'datos': DATOS_EMPRESA,
+            'ingresos_mes': 0, 'egresos_mes': 0,
+            'saldo_caja': 0, 'movimientos_caja': [],
+            'error_debug': str(e)
+        })
 
 @login_required
 def caja_view(request): 
@@ -157,15 +184,14 @@ def productos_view(request):
 @login_required
 def listas_view(request):
     try:
-        listas = ListaPrecio.objects.prefetch_related('items__producto').all().order_by('nombre')
-        # forzar evaluacion segura
-        _ = list(listas.values_list('id', flat=True)[:1])
+        listas = list(ListaPrecio.objects.prefetch_related('items__producto').all().order_by('nombre'))
         return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA})
     except Exception as e:
         import traceback
         traceback.print_exc()
         try:
-            listas = ListaPrecio.objects.all().order_by('nombre')
+            # fallback sin productos para que al menos se vean las listas
+            listas = list(ListaPrecio.objects.all().order_by('nombre'))
             return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA, 'error_fallback': str(e)})
         except Exception as e2:
             traceback.print_exc()
