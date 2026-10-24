@@ -34,70 +34,40 @@ def _log_accion(request, accion):
 
 @login_required
 def dashboard(request): 
-    try:
-        hoy = timezone.now()
-        hace_30 = hoy - timedelta(days=30)
-        ventas_qs = Venta.objects.select_related('cliente').order_by('-fecha_venta')
-        ventas_recientes = list(ventas_qs[:15])
-        presupuestos = list(Presupuesto.objects.select_related('cliente').order_by('-creado')[:10])
-        total_acum = ventas_qs.aggregate(Sum('total'))['total__sum'] or 0
-        total_mes = ventas_qs.filter(fecha_venta__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
-        count_mes = ventas_qs.filter(fecha_venta__gte=hace_30).count()
-        count_total = ventas_qs.count()
-        if count_total == 0:
-            total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
-            total_mes = Presupuesto.objects.filter(creado__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
-            count_mes = Presupuesto.objects.filter(creado__gte=hace_30).count()
-            count_total = Presupuesto.objects.count()
-        ticket_prom = total_acum / count_total if count_total else 0
-        try:
-            top_productos = list(ItemPresupuesto.objects.values('producto__codigo','producto__nombre').annotate(veces=Count('id')).order_by('-veces')[:5])
-        except Exception:
-            top_productos = []
-        try:
-            stock_bajo = list(Producto.objects.filter(stock__lte=3).order_by('stock')[:10])
-        except Exception:
-            try:
-                stock_bajo = list(Producto.objects.filter(stock__lte=3).values('id','codigo','nombre','stock').order_by('stock')[:10])
-            except Exception:
-                stock_bajo = []
-        try:
-            clientes_nuevos = list(Cliente.objects.order_by('-creado')[:5])
-        except Exception:
-            clientes_nuevos = []
-        try:
-            categorias = list(Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria'))
-        except Exception:
-            categorias = []
-        ingresos_mes = MovimientoCaja.objects.filter(tipo='INGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
-        egresos_mes = MovimientoCaja.objects.filter(tipo='EGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
-        total_ingresos = MovimientoCaja.objects.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
-        total_egresos = MovimientoCaja.objects.filter(tipo='EGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
-        saldo_caja = total_ingresos - total_egresos
-        movimientos_caja = list(MovimientoCaja.objects.order_by('-fecha')[:10])
-        return render(request, 'dashboard.html', {
-            'total_acum': total_acum, 'total_mes': total_mes, 'count_mes': count_mes,
-            'count_total': count_total, 'ticket_prom': ticket_prom,
-            'presupuestos': presupuestos, 'ventas_recientes': ventas_recientes,
-            'top_productos': top_productos, 'stock_bajo': stock_bajo,
-            'clientes_nuevos': clientes_nuevos, 'categorias': categorias, 'datos': DATOS_EMPRESA,
-            'ingresos_mes': ingresos_mes, 'egresos_mes': egresos_mes,
-            'saldo_caja': saldo_caja, 'movimientos_caja': movimientos_caja
-        })
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        # fallback minimo para que Inicio nunca tire 500
-        return render(request, 'dashboard.html', {
-            'total_acum': 0, 'total_mes': 0, 'count_mes': 0,
-            'count_total': 0, 'ticket_prom': 0,
-            'presupuestos': [], 'ventas_recientes': [],
-            'top_productos': [], 'stock_bajo': [],
-            'clientes_nuevos': [], 'categorias': [], 'datos': DATOS_EMPRESA,
-            'ingresos_mes': 0, 'egresos_mes': 0,
-            'saldo_caja': 0, 'movimientos_caja': [],
-            'error_debug': str(e)
-        })
+    hoy = timezone.now()
+    hace_30 = hoy - timedelta(days=30)
+    ventas_qs = Venta.objects.select_related('cliente').order_by('-fecha_venta')
+    ventas_recientes = ventas_qs[:15]
+    presupuestos = Presupuesto.objects.select_related('cliente').order_by('-creado')[:10]
+    total_acum = ventas_qs.aggregate(Sum('total'))['total__sum'] or 0
+    total_mes = ventas_qs.filter(fecha_venta__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
+    count_mes = ventas_qs.filter(fecha_venta__gte=hace_30).count()
+    count_total = ventas_qs.count()
+    if count_total == 0:
+        total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
+        total_mes = Presupuesto.objects.filter(creado__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
+        count_mes = Presupuesto.objects.filter(creado__gte=hace_30).count()
+        count_total = Presupuesto.objects.count()
+    ticket_prom = total_acum / count_total if count_total else 0
+    top_productos = ItemPresupuesto.objects.values('producto__codigo','producto__nombre').annotate(veces=Count('id')).order_by('-veces')[:5]
+    stock_bajo = Producto.objects.filter(stock__lte=3).order_by('stock')[:10]
+    clientes_nuevos = Cliente.objects.order_by('-creado')[:5]
+    categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
+    ingresos_mes = MovimientoCaja.objects.filter(tipo='INGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
+    egresos_mes = MovimientoCaja.objects.filter(tipo='EGRESO', fecha__gte=hace_30).aggregate(Sum('monto'))['monto__sum'] or 0
+    total_ingresos = MovimientoCaja.objects.filter(tipo='INGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
+    total_egresos = MovimientoCaja.objects.filter(tipo='EGRESO').aggregate(Sum('monto'))['monto__sum'] or 0
+    saldo_caja = total_ingresos - total_egresos
+    movimientos_caja = MovimientoCaja.objects.order_by('-fecha')[:10]
+    return render(request, 'dashboard.html', {
+        'total_acum': total_acum, 'total_mes': total_mes, 'count_mes': count_mes,
+        'count_total': count_total, 'ticket_prom': ticket_prom,
+        'presupuestos': presupuestos, 'ventas_recientes': ventas_recientes,
+        'top_productos': top_productos, 'stock_bajo': stock_bajo,
+        'clientes_nuevos': clientes_nuevos, 'categorias': categorias, 'datos': DATOS_EMPRESA,
+        'ingresos_mes': ingresos_mes, 'egresos_mes': egresos_mes,
+        'saldo_caja': saldo_caja, 'movimientos_caja': movimientos_caja
+    })
 
 @login_required
 def caja_view(request): 
@@ -172,38 +142,18 @@ def api_caja_eliminar(request):
 
 @login_required
 def productos_view(request):
-    try:
-        categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
-        count_p = Producto.objects.count()
-    except Exception:
-        # fallback si falta columna
-        categorias = []
-        count_p = 0
-    return render(request, 'productos.html', {'categorias': categorias, 'count_productos': count_p, 'datos': DATOS_EMPRESA})
+    categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
+    return render(request, 'productos.html', {'categorias': categorias, 'count_productos': Producto.objects.count(), 'datos': DATOS_EMPRESA})
 
 @login_required
 def listas_view(request):
-    try:
-        listas = list(ListaPrecio.objects.prefetch_related('items__producto').all().order_by('nombre'))
-        return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA})
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        try:
-            # fallback sin productos para que al menos se vean las listas
-            listas = list(ListaPrecio.objects.all().order_by('nombre'))
-            return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA, 'error_fallback': str(e)})
-        except Exception as e2:
-            traceback.print_exc()
-            return render(request, 'listas.html', {'listas': [], 'datos': DATOS_EMPRESA, 'error_fallback': str(e2)})
+    listas = ListaPrecio.objects.prefetch_related('items__producto').all().order_by('nombre')
+    return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA})
 
 @login_required
 def presupuestos_view(request):
     presupuestos = Presupuesto.objects.select_related('cliente').prefetch_related('items__producto').order_by('-creado')[:100]
-    try:
-        productos = Producto.objects.all().order_by('codigo')
-    except Exception:
-        productos = Producto.objects.values('id','codigo','nombre','precio','stock','categoria').order_by('codigo')
+    productos = Producto.objects.all().order_by('codigo')
     clientes = Cliente.objects.all().order_by('-creado')[:100]
     listas = ListaPrecio.objects.all()
     total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
@@ -242,20 +192,9 @@ def api_buscar_productos(request):
             productos = productos.filter(categoria__iexact=cat)
         if q:
             productos = productos.filter(Q(codigo__icontains=q) | Q(nombre__icontains=q) | Q(barcode__icontains=q))
-        productos = productos.order_by('nombre')[:5000]
+        productos = productos.order_by('codigo')[:5000]
         data = []
         for p in productos:
-            # getattr seguro por si la columna aun no existe en DB
-            fecha_precio = None
-            fecha_stock = None
-            try:
-                fecha_precio = p.fecha_ultimo_cambio_precio.isoformat() if getattr(p, 'fecha_ultimo_cambio_precio', None) else None
-            except Exception:
-                fecha_precio = None
-            try:
-                fecha_stock = p.fecha_ultimo_cambio_stock.isoformat() if getattr(p, 'fecha_ultimo_cambio_stock', None) else None
-            except Exception:
-                fecha_stock = None
             data.append({
                 'id': p.id,
                 'codigo': p.codigo,
@@ -264,36 +203,11 @@ def api_buscar_productos(request):
                 'precio': float(p.precio),
                 'stock': p.stock,
                 'categoria': p.categoria or 'OTRO',
-                'fecha_ultimo_cambio_precio': fecha_precio,
-                'fecha_ultimo_cambio_stock': fecha_stock,
             })
         return JsonResponse(data, safe=False)
     except Exception as e:
-        # FALLBACK BLINDADO: si la DB aun no tiene las columnas nuevas, usar values() que no pide esas columnas
-        try:
-            productos = Producto.objects.all()
-            if cat != 'TODOS':
-                productos = productos.filter(categoria__iexact=cat)
-            if q:
-                productos = productos.filter(Q(codigo__icontains=q) | Q(nombre__icontains=q) | Q(barcode__icontains=q))
-            productos = productos.values('id','codigo','barcode','nombre','precio','stock','categoria').order_by('nombre')[:5000]
-            data = []
-            for p in productos:
-                data.append({
-                    'id': p['id'],
-                    'codigo': p['codigo'],
-                    'barcode': p['barcode'] or '',
-                    'nombre': p['nombre'],
-                    'precio': float(p['precio']),
-                    'stock': p['stock'],
-                    'categoria': p['categoria'] or 'OTRO',
-                    'fecha_ultimo_cambio_precio': None,
-                    'fecha_ultimo_cambio_stock': None,
-                })
-            return JsonResponse(data, safe=False)
-        except Exception as e2:
-            import traceback; traceback.print_exc()
-            return JsonResponse([], safe=False)
+        import traceback; traceback.print_exc()
+        return JsonResponse([], safe=False)
 
 @login_required
 @csrf_exempt
@@ -321,8 +235,6 @@ def api_guardar_producto(request):
         if prod_id: qs_codigo = qs_codigo.exclude(id=prod_id)
         if qs_codigo.exists():
             return JsonResponse({'ok': False, 'error': f'Ya existe {codigo}'})
-        precio_anterior = float(p.precio) if getattr(p, 'precio', None) else 0
-        stock_anterior = int(p.stock) if getattr(p, 'stock', None) else 0
         p.codigo = codigo
         p.barcode = str(d.get('barcode','')).strip() or None
         p.nombre = nombre
@@ -331,13 +243,6 @@ def api_guardar_producto(request):
         except: p.precio = 0
         try: p.stock = int(float(str(d.get('stock',0)).replace(',','.')))
         except: p.stock = 0
-        try:
-            if abs(float(p.precio) - float(precio_anterior)) > 0.01:
-                p.fecha_ultimo_cambio_precio = timezone.now()
-            if int(p.stock) != int(stock_anterior):
-                p.fecha_ultimo_cambio_stock = timezone.now()
-        except:
-            pass
         p.save()
         if not es_nuevo and (precio_viejo != float(p.precio) or stock_viejo != int(p.stock)):
             _log_accion(request, f"Cambio Producto {p.codigo}: precio {precio_viejo}->{p.precio} stock {stock_viejo}->{p.stock}")
@@ -695,10 +600,6 @@ def api_actualizar_stock(request):
         prod = Producto.objects.get(id=producto_id)
         viejo = prod.stock
         prod.stock = stock
-        try:
-            prod.fecha_ultimo_cambio_stock = timezone.now()
-        except:
-            pass
         prod.save()
         _log_accion(request, f"Actualizo stock {prod.codigo}: {viejo}->{stock}")
         return JsonResponse({'ok': True, 'stock': prod.stock})
@@ -961,10 +862,6 @@ def api_aplicar_suba_categoria(request):
             nuevo=round(viejo*factor,2)
             if nuevo<=0: continue
             p.precio=nuevo
-            try:
-                p.fecha_ultimo_cambio_precio = timezone.now()
-            except:
-                pass
             p.save()
             actualizados+=1
         _log_accion(request, f"Aplico suba {porcentaje}% a categoria {categoria}: {actualizados} productos")
@@ -989,10 +886,6 @@ def api_actualizar_precio(request):
             return JsonResponse({'ok': False, 'error': 'Datos invalidos'})
         prod = Producto.objects.get(id=pid)
         prod.precio = nuevo
-        try:
-            prod.fecha_ultimo_cambio_precio = timezone.now()
-        except:
-            pass
         prod.save()
         _log_accion(request, f"Cambio precio directo {prod.codigo} a {nuevo}")
         return JsonResponse({'ok': True, 'precio': float(prod.precio), 'id': prod.id})
