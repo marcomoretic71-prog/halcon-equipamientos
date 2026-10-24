@@ -192,7 +192,7 @@ def api_buscar_productos(request):
             productos = productos.filter(categoria__iexact=cat)
         if q:
             productos = productos.filter(Q(codigo__icontains=q) | Q(nombre__icontains=q) | Q(barcode__icontains=q))
-        productos = productos.order_by('codigo')[:5000]
+        productos = productos.order_by('nombre')[:5000]
         data = []
         for p in productos:
             data.append({
@@ -203,6 +203,8 @@ def api_buscar_productos(request):
                 'precio': float(p.precio),
                 'stock': p.stock,
                 'categoria': p.categoria or 'OTRO',
+                'fecha_ultimo_cambio_precio': p.fecha_ultimo_cambio_precio.isoformat() if getattr(p, 'fecha_ultimo_cambio_precio', None) else None,
+                'fecha_ultimo_cambio_stock': p.fecha_ultimo_cambio_stock.isoformat() if getattr(p, 'fecha_ultimo_cambio_stock', None) else None,
             })
         return JsonResponse(data, safe=False)
     except Exception as e:
@@ -235,6 +237,8 @@ def api_guardar_producto(request):
         if prod_id: qs_codigo = qs_codigo.exclude(id=prod_id)
         if qs_codigo.exists():
             return JsonResponse({'ok': False, 'error': f'Ya existe {codigo}'})
+        precio_anterior = float(p.precio) if getattr(p, 'precio', None) else 0
+        stock_anterior = int(p.stock) if getattr(p, 'stock', None) else 0
         p.codigo = codigo
         p.barcode = str(d.get('barcode','')).strip() or None
         p.nombre = nombre
@@ -243,6 +247,13 @@ def api_guardar_producto(request):
         except: p.precio = 0
         try: p.stock = int(float(str(d.get('stock',0)).replace(',','.')))
         except: p.stock = 0
+        try:
+            if abs(float(p.precio) - float(precio_anterior)) > 0.01:
+                p.fecha_ultimo_cambio_precio = timezone.now()
+            if int(p.stock) != int(stock_anterior):
+                p.fecha_ultimo_cambio_stock = timezone.now()
+        except:
+            pass
         p.save()
         if not es_nuevo and (precio_viejo != float(p.precio) or stock_viejo != int(p.stock)):
             _log_accion(request, f"Cambio Producto {p.codigo}: precio {precio_viejo}->{p.precio} stock {stock_viejo}->{p.stock}")
@@ -600,6 +611,10 @@ def api_actualizar_stock(request):
         prod = Producto.objects.get(id=producto_id)
         viejo = prod.stock
         prod.stock = stock
+        try:
+            prod.fecha_ultimo_cambio_stock = timezone.now()
+        except:
+            pass
         prod.save()
         _log_accion(request, f"Actualizo stock {prod.codigo}: {viejo}->{stock}")
         return JsonResponse({'ok': True, 'stock': prod.stock})
@@ -862,6 +877,10 @@ def api_aplicar_suba_categoria(request):
             nuevo=round(viejo*factor,2)
             if nuevo<=0: continue
             p.precio=nuevo
+            try:
+                p.fecha_ultimo_cambio_precio = timezone.now()
+            except:
+                pass
             p.save()
             actualizados+=1
         _log_accion(request, f"Aplico suba {porcentaje}% a categoria {categoria}: {actualizados} productos")
@@ -886,6 +905,10 @@ def api_actualizar_precio(request):
             return JsonResponse({'ok': False, 'error': 'Datos invalidos'})
         prod = Producto.objects.get(id=pid)
         prod.precio = nuevo
+        try:
+            prod.fecha_ultimo_cambio_precio = timezone.now()
+        except:
+            pass
         prod.save()
         _log_accion(request, f"Cambio precio directo {prod.codigo} a {nuevo}")
         return JsonResponse({'ok': True, 'precio': float(prod.precio), 'id': prod.id})
