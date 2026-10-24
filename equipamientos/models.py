@@ -22,6 +22,8 @@ class Producto(models.Model):
     categoria = models.CharField(max_length=50, default="OTRO")
     precio = models.DecimalField(max_digits=12, decimal_places=2)
     stock = models.IntegerField(default=0)
+    fecha_ultimo_cambio_precio = models.DateTimeField(null=True, blank=True, verbose_name="Último cambio precio")
+    fecha_ultimo_cambio_stock = models.DateTimeField(null=True, blank=True, verbose_name="Último cambio stock")
 
     def __str__(self):
         return f"{self.nombre} ({self.codigo})"
@@ -106,7 +108,6 @@ class MovimientoCaja(models.Model):
     def __str__(self):
         return f"{self.tipo} - {self.concepto} ${self.monto}"
 
-# Estas tablas las usa el sistema multi-empresa, las dejamos tal cual estaban antes del blindaje
 class EmpresaCliente(models.Model):
     nombre = models.CharField(max_length=200)
     slug = models.SlugField(unique=True)
