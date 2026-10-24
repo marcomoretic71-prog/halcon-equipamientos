@@ -158,12 +158,18 @@ def productos_view(request):
 def listas_view(request):
     try:
         listas = ListaPrecio.objects.prefetch_related('items__producto').all().order_by('nombre')
-        # forzar evaluacion para detectar error de columna faltante antes de render
-        list(listas[:1])
-    except Exception:
-        # fallback sin prefetch de producto (evita SELECT * de Producto con columna nueva)
-        listas = ListaPrecio.objects.all().order_by('nombre')
-    return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA})
+        # forzar evaluacion segura
+        _ = list(listas.values_list('id', flat=True)[:1])
+        return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        try:
+            listas = ListaPrecio.objects.all().order_by('nombre')
+            return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA, 'error_fallback': str(e)})
+        except Exception as e2:
+            traceback.print_exc()
+            return render(request, 'listas.html', {'listas': [], 'datos': DATOS_EMPRESA, 'error_fallback': str(e2)})
 
 @login_required
 def presupuestos_view(request):
