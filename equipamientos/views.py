@@ -1016,3 +1016,56 @@ def api_actualizar_precio(request):
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
 
+
+
+@login_required
+@csrf_exempt
+def api_renombrar_lista(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        d = json.loads(request.body)
+        lista_id = d.get('lista_id')
+        nuevo_nombre = str(d.get('nuevo_nombre','')).strip()
+        actualizar_productos = d.get('actualizar_productos', True)
+        if not lista_id or not nuevo_nombre:
+            return JsonResponse({'ok': False, 'error': 'Falta lista_id o nuevo_nombre'})
+        if len(nuevo_nombre) < 3:
+            return JsonResponse({'ok': False, 'error': 'Nombre muy corto'})
+        lista = ListaPrecio.objects.get(id=lista_id)
+        viejo_nombre = lista.nombre
+        viejo_base = viejo_nombre.split(' - ')[0].strip().upper()
+        nuevo_base = nuevo_nombre.split(' - ')[0].strip().upper() or nuevo_nombre.strip().upper()
+        # Verificar duplicado
+        if ListaPrecio.objects.filter(nombre__iexact=nuevo_nombre).exclude(id=lista_id).exists():
+            return JsonResponse({'ok': False, 'error': f'Ya existe una lista llamada {nuevo_nombre}'})
+        lista.nombre = nuevo_nombre
+        lista.save()
+        actualizados = 0
+        if actualizar_productos:
+            # Actualizar categoria de todos los productos de esa lista
+            # 1. Productos que tienen categoria = viejo_base
+            # 2. Y/o productos que están en la lista
+            qs_productos_lista = Producto.objects.filter(id__in=lista.items.values_list('producto_id', flat=True))
+            for p in qs_productos_lista:
+                # Si la categoria actual es viejo_base o OTRO, la actualizamos
+                cat_actual = (p.categoria or '').upper()
+                if cat_actual == viejo_base or cat_actual == 'OTRO' or not cat_actual:
+                    p.categoria = nuevo_base
+                    p.save()
+                    actualizados += 1
+                elif cat_actual != nuevo_base:
+                    # También si quiere forzar, actualizamos igual si el producto solo está en esa lista
+                    # Si el producto está solo en esta lista, lo actualizamos
+                    otras_listas = ItemListaPrecio.objects.filter(producto=p).exclude(lista=lista).count()
+                    if otras_listas == 0:
+                        p.categoria = nuevo_base
+                        p.save()
+                        actualizados += 1
+        _log_accion(request, f"Renombro lista {viejo_nombre} -> {nuevo_nombre} - Productos actualizados: {actualizados}")
+        return JsonResponse({'ok': True, 'viejo_nombre': viejo_nombre, 'nuevo_nombre': nuevo_nombre, 'actualizados': actualizados, 'nuevo_base': nuevo_base})
+    except ListaPrecio.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Lista no existe'})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})

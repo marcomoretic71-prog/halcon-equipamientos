@@ -49,7 +49,7 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
   </div>
   <div class="flex flex-col gap-4">
   {% for lista in listas %}
-    <div class="bg-[#151515] border border-[#262626] rounded-[16px] overflow-hidden w-full">
+    <div class="bg-[#151515] border border-[#262626] rounded-[16px] overflow-hidden w-full" data-nombre="{{ lista.nombre|lower }}">
       <button onclick="toggleLista('{{ lista.id }}')" class="w-full flex items-center justify-between p-4 hover:bg-[#1c1c1c] transition text-left">
         <div class="flex items-center gap-4">
           <div class="w-11 h-11 rounded-full bg-[#facc15]/15 text-[#facc15] flex items-center justify-center font-black text-[14px]">{{ lista.items.count }}</div>
@@ -59,6 +59,7 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
           </div>
         </div>
         <div class="flex items-center gap-3">
+          <button onclick="event.stopPropagation(); editarLista('{{ lista.id }}', '{{ lista.nombre|escapejs }}')" class="bg-[#facc15] text-black font-bold px-3 py-1.5 rounded-full text-xs hover:bg-yellow-300">✏️ Editar</button>
           <span class="text-[11px] text-zinc-500 hidden md:block">SOLO LECTURA</span>
           <span id="arrow-{{ lista.id }}" class="text-zinc-500">▼</span>
         </div>
@@ -136,6 +137,33 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,sans-serif}
         <button id="btnConfirmar" onclick="confirmarImport()" class="flex-1 bg-[#facc15] text-black font-black py-3 rounded-full text-sm">✅ Confirmar e Importar (blindado)</button>
       </div>
     </div>
+  </div>
+</div>
+<!-- MODAL EDITAR LISTA -->
+<div id="modalEditarLista" class="fixed inset-0 z-[101] hidden bg-black/80 backdrop-blur flex items-center justify-center p-4">
+  <div class="bg-[#151515] border border-[#333] rounded-[20px] w-full max-w-[500px] p-6">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="font-black text-[18px] text-[#facc15]">✏️ Editar Lista</h3>
+      <button onclick="cerrarEditarLista()" class="w-8 h-8 rounded-full bg-[#222] text-white">✕</button>
+    </div>
+    <input type="hidden" id="edit_lista_id">
+    <div class="mb-3">
+      <label class="block mb-1 text-[11px] text-zinc-500">Nombre actual</label>
+      <div id="edit_viejo_nombre" class="bg-[#0f0f0f] border border-[#222] rounded-full px-4 py-2 text-sm text-zinc-500"></div>
+    </div>
+    <div class="mb-3">
+      <label class="block mb-1 text-[11px] text-[#facc15] font-bold">Nuevo nombre *</label>
+      <input id="edit_nuevo_nombre" class="w-full bg-[#0f0f0f] border-2 border-[#facc15] rounded-full px-4 py-2.5 text-sm outline-none" placeholder="Ej: EQUIPAMIENTO 4X4 - BASE">
+      <small class="text-[10px] text-zinc-500 mt-1 block">La primera parte antes de " - " será la nueva categoría en Productos. Ej: "BATERIAS PREMIUM - BASE" → categoría "BATERIAS PREMIUM"</small>
+    </div>
+    <div class="mb-3 flex items-center gap-2">
+      <input type="checkbox" id="edit_actualizar_productos" checked class="accent-[#facc15]">
+      <label for="edit_actualizar_productos" class="text-[12px] text-zinc-300">Actualizar categoría en Productos automáticamente (recomendado)</label>
+    </div>
+    <div id="edit_preview" class="bg-[#222] rounded-[12px] p-3 mb-4 hidden">
+      <small class="text-[#4ade80] text-[11px]">Se actualizarán productos a categoría <b id="edit_preview_cat"></b></small>
+    </div>
+    <button onclick="guardarEditarLista()" class="w-full bg-[#facc15] text-black font-black py-3 rounded-full text-sm">💾 Guardar cambios</button>
   </div>
 </div>
 <script>
@@ -239,6 +267,45 @@ document.getElementById('buscador').addEventListener('input', e=>{
   });
   if(q.length>2) document.querySelectorAll('[id^=body-]').forEach(b=>b.classList.remove('hidden'));
 });
+// EDITAR LISTA
+function getCSRFToken(){ let m=document.cookie.match(/csrftoken=([^;]+)/); if(m) return m[1]; return '{{ csrf_token }}'; }
+function editarLista(id, nombre){
+  document.getElementById('edit_lista_id').value = id;
+  document.getElementById('edit_viejo_nombre').innerText = nombre;
+  document.getElementById('edit_nuevo_nombre').value = nombre;
+  document.getElementById('modalEditarLista').classList.remove('hidden');
+  actualizarPreview();
+}
+function cerrarEditarLista(){ document.getElementById('modalEditarLista').classList.add('hidden'); }
+function actualizarPreview(){
+  let nuevo = document.getElementById('edit_nuevo_nombre').value.trim();
+  let base = nuevo.split(' - ')[0].trim().toUpperCase() || nuevo.toUpperCase();
+  document.getElementById('edit_preview_cat').innerText = base;
+  document.getElementById('edit_preview').classList.toggle('hidden', !nuevo);
+}
+document.getElementById('edit_nuevo_nombre')?.addEventListener('input', actualizarPreview);
+function guardarEditarLista(){
+  let id = document.getElementById('edit_lista_id').value;
+  let nuevo = document.getElementById('edit_nuevo_nombre').value.trim();
+  let actualizar = document.getElementById('edit_actualizar_productos').checked;
+  if(!nuevo || nuevo.length<3){ alert('Poné un nombre válido'); return; }
+  if(!confirm(`¿Renombrar lista a "${nuevo}"?\n${actualizar ? 'Se actualizará la categoría en Productos también.' : ''}`)) return;
+  fetch('/api/renombrar_lista/', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken': getCSRFToken()},
+    body: JSON.stringify({lista_id: id, nuevo_nombre: nuevo, actualizar_productos: actualizar})
+  })
+  .then(r=>r.json())
+  .then(d=>{
+    if(d.ok){
+      alert(`✅ Lista renombrada: ${d.viejo_nombre} → ${d.nuevo_nombre}\nProductos actualizados: ${d.actualizados} a categoría ${d.nuevo_base}`);
+      location.reload();
+    } else {
+      alert('❌ Error: '+(d.error||'No se pudo renombrar'));
+    }
+  })
+  .catch(err=>alert('Error de red: '+err));
+}
 </script>
 </body>
 </html>
