@@ -450,14 +450,59 @@ def api_venta_directa(request):
             return JsonResponse({'ok': False, 'error': 'Falta cliente'})
         cliente, _ = Cliente.objects.get_or_create(nombre=cliente_nombre, defaults={'telefono': data.get('telefono',''), 'vehiculo_anio': data.get('vehiculo','')})
         codigo = f"VEN-{uuid.uuid4().hex[:4].upper()}"
-        venta = Venta.objects.create(codigo=codigo, cliente=cliente, vehiculo=data.get('vehiculo',''), colocacion=data.get('colocacion',0), total=data.get('total',0), forma_pago=data.get('forma_pago','EFECTIVO'), es_directa=True, stock_descontado=True)
+        # NUEVO - DESCUENTO
+        colocacion = float(data.get('colocacion',0) or 0)
+        subtotal_productos = float(data.get('subtotal_productos',0) or 0)
+        descuento_porcentaje = float(data.get('descuento_porcentaje',0) or 0)
+        descuento_monto = float(data.get('descuento_monto',0) or 0)
+        total_original = float(data.get('total_original',0) or data.get('total',0) or 0)
+        total_final = float(data.get('total',0) or 0)
+        forma_pago = data.get('forma_pago','EFECTIVO')
+        venta = Venta.objects.create(
+            codigo=codigo, 
+            cliente=cliente, 
+            vehiculo=data.get('vehiculo',''), 
+            colocacion=colocacion, 
+            total=total_final,
+            total_original=total_original if total_original else total_final,
+            subtotal_productos=subtotal_productos,
+            descuento_porcentaje=descuento_porcentaje,
+            descuento_monto=descuento_monto,
+            forma_pago=forma_pago, 
+            es_directa=True, 
+            stock_descontado=True
+        )
         for it in data.get('items',[]):
-            prod = Producto.objects.get(id=it['id'])
-            ItemVenta.objects.create(venta=venta, producto=prod, cantidad=int(it['cantidad']), precio=float(it.get('precio', prod.precio)))
-            prod.stock = max(0, prod.stock - int(it['cantidad']))
-            prod.save()
+            # NUEVO - PRODUCTO MANUAL
+            if it.get('es_manual'):
+                ItemVenta.objects.create(
+                    venta=venta, 
+                    producto=None,
+                    es_manual=True,
+                    nombre_manual=str(it.get('nombre_manual','MANUAL')).strip()[:250],
+                    cantidad=int(it.get('cantidad',1)), 
+                    precio=float(it.get('precio',0))
+                )
+                # No descuenta stock
+            else:
+                try:
+                    prod = Producto.objects.get(id=it['id'])
+                    ItemVenta.objects.create(venta=venta, producto=prod, es_manual=False, nombre_manual="", cantidad=int(it['cantidad']), precio=float(it.get('precio', prod.precio)))
+                    # Solo descuenta stock si es producto real
+                    prod.stock = max(0, prod.stock - int(it['cantidad']))
+                    prod.save()
+                except Producto.DoesNotExist:
+                    # Fallback como manual si no existe
+                    ItemVenta.objects.create(
+                        venta=venta, 
+                        producto=None,
+                        es_manual=True,
+                        nombre_manual=str(it.get('nombre','MANUAL')).strip()[:250],
+                        cantidad=int(it.get('cantidad',1)), 
+                        precio=float(it.get('precio',0))
+                    )
         MovimientoCaja.objects.create(tipo='INGRESO', concepto=f"Venta Directa {codigo} - {cliente.nombre}", monto=venta.total, forma_pago=venta.forma_pago, venta=venta)
-        _log_accion(request, f"Venta directa {codigo} cliente {cliente.nombre} total {venta.total}")
+        _log_accion(request, f"Venta directa {codigo} cliente {cliente.nombre} total {venta.total} desc {descuento_porcentaje}% (-{descuento_monto})")
         return JsonResponse({'ok': True, 'codigo': codigo})
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -878,6 +923,9 @@ def api_eliminar_venta(request):
             items = list(ItemVenta.objects.select_related('producto').filter(venta=venta))
             productos_devueltos = []
             for it in items:
+                if it.es_manual or not it.producto:
+                    productos_devueltos.append(f"MANUAL {it.nombre_manual} x{it.cantidad} (sin stock)")
+                    continue
                 prod = it.producto
                 prod.stock = (prod.stock or 0) + (it.cantidad or 0)
                 prod.save()

@@ -24,7 +24,6 @@ class Producto(models.Model):
     stock = models.IntegerField(default=0)
     fecha_ultimo_cambio_precio = models.DateTimeField(null=True, blank=True, verbose_name="Último cambio precio")
     fecha_ultimo_cambio_stock = models.DateTimeField(null=True, blank=True, verbose_name="Último cambio stock")
-
     def __str__(self):
         return f"{self.nombre} ({self.codigo})"
 
@@ -85,16 +84,27 @@ class Venta(models.Model):
     stock_descontado = models.BooleanField(default=False)
     es_directa = models.BooleanField(default=False, help_text="True si es venta sin presupuesto")
     creado = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    # NUEVO - DESCUENTO
+    descuento_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name="Descuento % sobre productos")
+    descuento_monto = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Monto descontado")
+    subtotal_productos = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Subtotal productos sin descuento")
+    total_original = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Total original sin descuento")
     class Meta:
         ordering = ['-fecha_venta']
     def __str__(self): return f"{self.codigo} - {self.cliente.nombre}"
 
 class ItemVenta(models.Model):
     venta = models.ForeignKey(Venta, on_delete=models.CASCADE, related_name='items')
-    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='items_venta')
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='items_venta', null=True, blank=True)
     cantidad = models.IntegerField(default=1)
     precio = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    def __str__(self): return f"{self.venta.codigo} - {self.producto.codigo} x{self.cantidad}"
+    # NUEVO - PRODUCTO MANUAL
+    es_manual = models.BooleanField(default=False, verbose_name="Es producto manual sin stock")
+    nombre_manual = models.CharField(max_length=250, blank=True, default="", verbose_name="Nombre manual")
+    def __str__(self):
+        if self.es_manual:
+            return f"{self.venta.codigo} - MANUAL {self.nombre_manual} x{self.cantidad}"
+        return f"{self.venta.codigo} - {self.producto.codigo if self.producto else 'SIN PROD'} x{self.cantidad}"
 
 class MovimientoCaja(models.Model):
     TIPO_CHOICES = [('INGRESO','Ingreso'),('EGRESO','Egreso')]
