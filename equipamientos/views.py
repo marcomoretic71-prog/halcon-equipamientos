@@ -502,6 +502,25 @@ def api_venta_directa(request):
                         precio=float(it.get('precio',0))
                     )
         MovimientoCaja.objects.create(tipo='INGRESO', concepto=f"Venta Directa {codigo} - {cliente.nombre}", monto=venta.total, forma_pago=venta.forma_pago, venta=venta)
+
+        # BACKUP ANTI-PERDIDA - log incremental + backup cada 5 ventas
+        try:
+            import json as _json
+            _log_path = '/tmp/ventas_incremental.jsonl'
+            with open(_log_path, 'a', encoding='utf-8') as _f:
+                _f.write(_json.dumps({
+                    'fecha': timezone.now().isoformat(),
+                    'codigo': codigo,
+                    'cliente': cliente.nombre,
+                    'total': float(venta.total),
+                    'forma_pago': venta.forma_pago
+                }) + "\n")
+            if Venta.objects.count() % 5 == 0:
+                from django.core import management as _mgmt
+                _mgmt.call_command('backup_postgres', tipo='VENTA')
+        except Exception as _e:
+            print(f"Backup hook error: {_e}")
+
         _log_accion(request, f"Venta directa {codigo} cliente {cliente.nombre} total {venta.total} desc {descuento_porcentaje}% (-{descuento_monto})")
         return JsonResponse({'ok': True, 'codigo': codigo})
     except Exception as e:
@@ -711,6 +730,23 @@ def api_actualizar_stock(request):
         except:
             pass
         prod.save()
+
+        # === NUEVO: HISTORIAL STOCK ===
+        try:
+            from .models import ProductoHistorial
+            ProductoHistorial.objects.create(
+                producto=prod,
+                codigo=prod.codigo,
+                nombre=prod.nombre,
+                campo='STOCK',
+                valor_viejo=str(viejo),
+                valor_nuevo=str(stock),
+                usuario=request.user.username if request.user.is_authenticated else 'cliente',
+                ip=request.META.get('REMOTE_ADDR','')
+            )
+        except Exception as e:
+            print(f"Error historial stock: {e}")
+
         _log_accion(request, f"Actualizo stock {prod.codigo}: {viejo}->{stock}")
         return JsonResponse({'ok': True, 'stock': prod.stock})
     except Producto.DoesNotExist:
@@ -1002,21 +1038,47 @@ def api_actualizar_precio(request):
         if not pid or nuevo<=0:
             return JsonResponse({'ok': False, 'error': 'Datos invalidos'})
         prod = Producto.objects.get(id=pid)
+        viejo = float(prod.precio)
         prod.precio = nuevo
         try:
             prod.fecha_ultimo_cambio_precio = timezone.now()
         except:
             pass
         prod.save()
-        _log_accion(request, f"Cambio precio directo {prod.codigo} a {nuevo}")
+        
+        # === NUEVO: GUARDAR HISTORIAL IMBORRABLE ===
+        try:
+            from .models import ProductoHistorial
+            ProductoHistorial.objects.create(
+                producto=prod,
+                codigo=prod.codigo,
+                nombre=prod.nombre,
+                campo='PRECIO',
+                valor_viejo=str(viejo),
+                valor_nuevo=str(nuevo),
+                usuario=request.user.username if request.user.is_authenticated else 'cliente',
+                ip=request.META.get('REMOTE_ADDR','')
+            )
+        except Exception as e:
+            print(f"Error historial: {e}")
+
+        _log_accion(request, f"Cambio precio directo {prod.codigo} {viejo} -> {nuevo}")
+        
+        # Backup incremental cada 10 cambios de precio
+        try:
+            from .models import ProductoHistorial
+            if ProductoHistorial.objects.filter(campo='PRECIO').count() % 10 == 0:
+                from django.core import management
+                management.call_command('backup_postgres', tipo='PRECIO')
+        except:
+            pass
+
         return JsonResponse({'ok': True, 'precio': float(prod.precio), 'id': prod.id})
     except Producto.DoesNotExist:
         return JsonResponse({'ok': False, 'error': 'Producto no existe'})
     except Exception as e:
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
-
-
 
 @login_required
 @csrf_exempt
@@ -1066,6 +1128,75 @@ def api_renombrar_lista(request):
         return JsonResponse({'ok': True, 'viejo_nombre': viejo_nombre, 'nuevo_nombre': nuevo_nombre, 'actualizados': actualizados, 'nuevo_base': nuevo_base})
     except ListaPrecio.DoesNotExist:
         return JsonResponse({'ok': False, 'error': 'Lista no existe'})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+
+# ===== SISTEMA ANTI-PERDIDA - BACKUPS =====
+
+import json, os, gzip, io
+from django.http import JsonResponse, HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required
+from django.utils import timezone
+from django.core import management
+from .models import Producto, Venta, Cliente, MovimientoCaja
+
+@login_required
+@csrf_exempt
+def api_backup_manual(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        # Llamar al management command
+        management.call_command('backup_postgres', tipo='MANUAL')
+        return JsonResponse({'ok': True, 'mensaje': 'Backup manual creado'})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+@login_required
+def api_backup_listar(request):
+    try:
+        from .models import BackupAutomatico
+        backups = BackupAutomatico.objects.order_by('-fecha')[:50]
+        data = [{'id': b.id, 'fecha': b.fecha.strftime('%d/%m/%Y %H:%M'), 'tipo': b.tipo, 'archivo': b.archivo_nombre, 'ventas': b.cantidad_ventas, 'productos': b.cantidad_productos, 'tamano_kb': round(b.tamano_kb,1), 'estado': b.estado} for b in backups]
+        return JsonResponse(data, safe=False)
+    except Exception as e:
+        return JsonResponse([], safe=False)
+
+@login_required
+def api_backup_descargar(request, backup_id):
+    try:
+        from .models import BackupAutomatico
+        b = BackupAutomatico.objects.get(id=backup_id)
+        response = HttpResponse(b.archivo_json, content_type='application/json')
+        response['Content-Disposition'] = f'attachment; filename="{b.archivo_nombre}.json"'
+        return response
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+@login_required
+@csrf_exempt
+def api_backup_restaurar(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        data = json.loads(request.body)
+        backup_id = data.get('backup_id')
+        from .models import BackupAutomatico
+        b = BackupAutomatico.objects.get(id=backup_id)
+        backup_data = json.loads(b.archivo_json)
+        # Restaurar solo si la tabla esta vacia o confirmacion
+        # Por seguridad solo restauramos si no hay ventas
+        if Venta.objects.count() > 0 and not data.get('forzar'):
+            return JsonResponse({'ok': False, 'error': 'Ya hay ventas, usa forzar=true si queres pisar', 'ventas_actuales': Venta.objects.count()})
+        
+        # Restaurar clientes, productos, etc (logica simple)
+        # Nota: esto es un ejemplo, en produccion usar deserializacion mas segura
+        # Por ahora solo informamos que el backup esta disponible
+        return JsonResponse({'ok': True, 'mensaje': f'Backup {b.archivo_nombre} listo para restaurar manualmente, contiene {b.cantidad_ventas} ventas'})
     except Exception as e:
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})

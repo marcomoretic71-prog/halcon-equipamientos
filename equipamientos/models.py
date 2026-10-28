@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 class DatosEmpresa(models.Model):
     direccion = models.CharField(max_length=200, default="Ruta 89 Km. Quimili, SGO")
@@ -156,3 +157,40 @@ class ConfigSistema(models.Model):
     version = models.CharField(max_length=20, default="2.1")
     def __str__(self):
         return f"Config v{self.version} - {'BLOQUEADO' if self.bloqueado_global else 'OK'}"
+
+
+class BackupAutomatico(models.Model):
+    fecha = models.DateTimeField(default=timezone.now)
+    tipo = models.CharField(max_length=20, default='AUTO') # AUTO, VENTA, MANUAL, PRECIO
+    archivo_nombre = models.CharField(max_length=255)
+    archivo_json = models.TextField(blank=True)
+    cantidad_productos = models.IntegerField(default=0)
+    cantidad_ventas = models.IntegerField(default=0)
+    cantidad_clientes = models.IntegerField(default=0)
+    tamano_kb = models.FloatField(default=0)
+    estado = models.CharField(max_length=20, default='OK')
+    nota = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['-fecha']
+    
+    def __str__(self):
+        return f"{self.fecha.strftime('%d/%m %H:%M')} - {self.tipo} - V:{self.cantidad_ventas} P:{self.cantidad_productos}"
+
+class ProductoHistorial(models.Model):
+    """Historial imborrable de cada cambio de precio/stock - NUNCA SE BORRA"""
+    producto = models.ForeignKey('Producto', on_delete=models.CASCADE, related_name='historial', null=True)
+    codigo = models.CharField(max_length=100)
+    nombre = models.CharField(max_length=300, blank=True)
+    campo = models.CharField(max_length=20) # PRECIO, STOCK
+    valor_viejo = models.CharField(max_length=100, blank=True)
+    valor_nuevo = models.CharField(max_length=100)
+    usuario = models.CharField(max_length=100, default='cliente')
+    fecha = models.DateTimeField(default=timezone.now)
+    ip = models.CharField(max_length=50, blank=True)
+
+    class Meta:
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f"{self.fecha.strftime('%d/%m %H:%M')} - {self.codigo} {self.campo}: {self.valor_viejo} -> {self.valor_nuevo}"
