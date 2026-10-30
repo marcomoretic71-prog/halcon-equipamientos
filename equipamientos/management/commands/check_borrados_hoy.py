@@ -5,23 +5,22 @@ from django.utils import timezone
 from datetime import timedelta
 
 class Command(BaseCommand):
-    help = 'Chequea que se borro hoy comparando ultimos 2 backups'
+    help = 'Chequea que se borro hoy'
 
     def handle(self, *args, **options):
         from equipamientos.models import BackupAutomatico, Producto
         hoy = timezone.now().date()
-        ayer = hoy - timedelta(days=1)
         
         backups = list(BackupAutomatico.objects.order_by('-fecha')[:5])
-        if len(backups) < 2:
-            self.stdout.write("Solo hay 1 backup, no puedo comparar. Tenes backup de hoy y de ayer?")
-            # igual listamos lo de hoy
-            backups = list(BackupAutomatico.objects.filter(fecha__date=hoy).order_by('-fecha'))
-            if backups:
-                self.stdout.write(f"Backup de hoy: {backups[0].archivo_nombre} - Prod: {backups[0].cantidad_productos}")
+        self.stdout.write(f"Backups en DB: {len(backups)}")
+        for b in backups:
+            self.stdout.write(f"  - {b.fecha} | {b.archivo_nombre} | Prod: {b.cantidad_productos} | Tipo: {b.tipo}")
+
+        if not backups:
+            self.stdout.write(self.style.ERROR("No hay backups en DB"))
             return
 
-        # Descomprimir ultimos 2
+        # Cargar ultimo backup
         def load_backup(b):
             try:
                 raw = b.archivo_json
@@ -36,56 +35,50 @@ class Command(BaseCommand):
                 return {}
 
         ultimo = backups[0]
-        anterior = backups[1]
-        
-        self.stdout.write(f"Comparando:")
-        self.stdout.write(f"  ANTERIOR: {anterior.archivo_nombre} - {anterior.fecha} - Prod: {anterior.cantidad_productos}")
-        self.stdout.write(f"  ULTIMO:   {ultimo.archivo_nombre} - {ultimo.fecha} - Prod: {ultimo.cantidad_productos}")
-        
         data_ult = load_backup(ultimo)
-        data_ant = load_backup(anterior)
+        prods_backup = {p['codigo']: p for p in data_ult.get('productos', [])}
         
-        prods_ult = {p['codigo']: p for p in data_ult.get('productos', [])}
-        prods_ant = {p['codigo']: p for p in data_ant.get('productos', [])}
-        
-        codigos_ult = set(prods_ult.keys())
-        codigos_ant = set(prods_ant.keys())
-        
-        borrados = codigos_ant - codigos_ult
-        agregados = codigos_ult - codigos_ant
+        prods_actual_qs = list(Producto.objects.values('codigo','nombre','precio'))
+        prods_actual = {p['codigo']: p for p in prods_actual_qs}
         
         self.stdout.write("")
-        if borrados:
-            self.stdout.write(self.style.ERROR(f"🔴 BORRADOS HOY ({len(borrados)}):"))
-            for cod in list(borrados)[:50]:
-                p = prods_ant.get(cod, {})
-                self.stdout.write(f"  - {cod} | {p.get('nombre','')} | ${p.get('precio','')}")
-            if len(borrados) > 50:
-                self.stdout.write(f"  ... y {len(borrados)-50} mas")
-        else:
-            self.stdout.write(self.style.SUCCESS("✅ No se borro ningun producto entre los ultimos 2 backups"))
+        self.stdout.write(f"Backup mas reciente: {ultimo.archivo_nombre}")
+        self.stdout.write(f"  Productos en backup: {len(prods_backup)}")
+        self.stdout.write(f"  Productos en DB ahora: {len(prods_actual)}")
+        self.stdout.write("")
+
+        codigos_backup = set(prods_backup.keys())
+        codigos_actual = set(prods_actual.keys())
         
+        borrados = codigos_backup - codigos_actual
+        agregados = codigos_actual - codigos_backup
+
+        if borrados:
+            self.stdout.write(self.style.ERROR(f"🔴 BORRADOS desde el ultimo backup ({len(borrados)}):"))
+            for cod in list(borrados)[:100]:
+                p = prods_backup.get(cod, {})
+                self.stdout.write(f"  - {cod} | {p.get('nombre','')} | ${p.get('precio','')}")
+            if len(borrados) > 100:
+                self.stdout.write(f"  ... y {len(borrados)-100} mas")
+        else:
+            self.stdout.write(self.style.SUCCESS("✅ No se borro ningun producto desde el ultimo backup"))
+
         self.stdout.write("")
         if agregados:
-            self.stdout.write(self.style.SUCCESS(f"🟢 AGREGADOS ({len(agregados)}):"))
+            self.stdout.write(self.style.SUCCESS(f"🟢 AGREGADOS desde ultimo backup ({len(agregados)}):"))
             for cod in list(agregados)[:20]:
-                p = prods_ult.get(cod, {})
-                self.stdout.write(f"  + {cod} | {p.get('nombre','')}")
+                p = prods_actual.get(cod, {})
+                self.stdout.write(f"  + {cod} | {p.get('nombre','')} | ${p.get('precio','')}")
 
-        # Chequear Productos actuales vs backup
-        self.stdout.write("")
-        self.stdout.write("--- Estado actual en DB ---")
-        total_actual = Producto.objects.count()
-        self.stdout.write(f"Productos en DB ahora: {total_actual}")
-        
-        # Chequear si hubo borrados via ProductoHistorial si existe
+        # Revisar si hubo cambios hoy en ProductoHistorial
         try:
             from equipamientos.models import ProductoHistorial
-            hoy_historial = ProductoHistorial.objects.filter(fecha__date=hoy).order_by('-fecha')[:20]
-            if hoy_historial:
+            hoy_hist = list(ProductoHistorial.objects.filter(fecha__date=hoy).order_by('-fecha')[:30])
+            if hoy_hist:
                 self.stdout.write("")
-                self.stdout.write(f"Historial de hoy ({hoy}):")
-                for h in hoy_historial:
-                    self.stdout.write(f"  {h.fecha} - {h.producto.codigo} - {h.accion} - {h.precio_anterior} -> {h.precio_nuevo}")
-        except:
-            pass
+                self.stdout.write(f"📜 Historial de precios de HOY {hoy}:")
+                for h in hoy_hist:
+                    prod_code = getattr(h.producto, 'codigo', str(h.producto_id))
+                    self.stdout.write(f"  {h.fecha.strftime('%H:%M')} - {prod_code} - {h.accion if hasattr(h,'accion') else ''} {getattr(h,'precio_anterior','')} -> {getattr(h,'precio_nuevo','')}")
+        except Exception as e:
+            self.stdout.write(f"Sin historial o error: {e}")
