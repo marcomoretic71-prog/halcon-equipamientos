@@ -12,11 +12,11 @@ class Command(BaseCommand):
         hoy = timezone.now().date()
         ayer = hoy - timedelta(days=1)
         
-        backups = list(BackupAutomatico.objects.order_by('-fecha_creacion')[:5])
+        backups = list(BackupAutomatico.objects.order_by('-fecha')[:5])
         if len(backups) < 2:
             self.stdout.write("Solo hay 1 backup, no puedo comparar. Tenes backup de hoy y de ayer?")
             # igual listamos lo de hoy
-            backups = list(BackupAutomatico.objects.filter(fecha_creacion__date=hoy).order_by('-fecha_creacion'))
+            backups = list(BackupAutomatico.objects.filter(fecha__date=hoy).order_by('-fecha'))
             if backups:
                 self.stdout.write(f"Backup de hoy: {backups[0].archivo_nombre} - Prod: {backups[0].cantidad_productos}")
             return
@@ -39,8 +39,8 @@ class Command(BaseCommand):
         anterior = backups[1]
         
         self.stdout.write(f"Comparando:")
-        self.stdout.write(f"  ANTERIOR: {anterior.archivo_nombre} - {anterior.fecha_creacion} - Prod: {anterior.cantidad_productos}")
-        self.stdout.write(f"  ULTIMO:   {ultimo.archivo_nombre} - {ultimo.fecha_creacion} - Prod: {ultimo.cantidad_productos}")
+        self.stdout.write(f"  ANTERIOR: {anterior.archivo_nombre} - {anterior.fecha} - Prod: {anterior.cantidad_productos}")
+        self.stdout.write(f"  ULTIMO:   {ultimo.archivo_nombre} - {ultimo.fecha} - Prod: {ultimo.cantidad_productos}")
         
         data_ult = load_backup(ultimo)
         data_ant = load_backup(anterior)
