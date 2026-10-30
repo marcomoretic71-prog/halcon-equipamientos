@@ -1,123 +1,121 @@
-import json, os, gzip, base64
-from datetime import datetime
+import os
+import json
+import gzip
+import base64
+from io import BytesIO
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from equipamientos.models import Producto, Venta, ItemVenta, Cliente, MovimientoCaja, Presupuesto, ItemPresupuesto
-
-def upload_to_drive(file_path, file_name):
-    """Sube archivo a Google Drive si hay credenciales, si no, no falla"""
-    try:
-        # Buscar credenciales en env vars
-        folder_id = os.getenv('GOOGLE_DRIVE_FOLDER_ID')
-        creds_json_b64 = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON_B64')
-        creds_json_raw = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON')
-        
-        if not folder_id:
-            print("No hay GOOGLE_DRIVE_FOLDER_ID, skip Drive upload")
-            return False
-
-        # Decodificar credenciales
-        import json as js
-        if creds_json_b64:
-            creds_json_str = base64.b64decode(creds_json_b64).decode('utf-8')
-            creds_dict = js.loads(creds_json_str)
-        elif creds_json_raw:
-            creds_dict = js.loads(creds_json_raw)
-        else:
-            # Buscar archivo local
-            possible_paths = ['/app/google-credentials.json', '/app/equipamientos/google-credentials.json', './google-credentials.json']
-            creds_dict = None
-            for p in possible_paths:
-                if os.path.exists(p):
-                    with open(p, 'r') as f:
-                        creds_dict = js.load(f)
-                    break
-            if not creds_dict:
-                print("No hay credenciales de Drive")
-                return False
-
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-        from googleapiclient.http import MediaFileUpload
-
-        SCOPES = ['https://www.googleapis.com/auth/drive']
-        credentials = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-        service = build('drive', 'v3', credentials=credentials)
-
-        file_metadata = {
-            'name': file_name,
-            'parents': [folder_id]
-        }
-        media = MediaFileUpload(file_path, mimetype='application/gzip', resumable=True)
-        file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-        print(f"✅ Subido a Drive: {file_name} ID: {file.get('id')}")
-        return True
-
-    except Exception as e:
-        print(f"⚠️ Error subiendo a Drive (no critico): {e}")
-        import traceback; traceback.print_exc()
-        return False
-
 
 class Command(BaseCommand):
-    help = 'Backup completo anti-perdida HALCON + Drive'
+    help = 'Backup HALCON + subida a Drive via OAuth (cuenta personal)'
 
     def add_arguments(self, parser):
-        parser.add_argument('--tipo', type=str, default='AUTO')
+        parser.add_argument('--tipo', default='MANUAL', choices=['AUTO','VENTA','MANUAL','PRECIO'])
 
     def handle(self, *args, **options):
+        from equipamientos.models import (
+            Cliente, Producto, Presupuesto, ItemPresupuesto,
+            ListaPrecio, ItemListaPrecio, Venta, ItemVenta,
+            MovimientoCaja, BackupAutomatico
+        )
         tipo = options['tipo']
-        self.stdout.write(f"Iniciando backup {tipo}...")
-        
+        ahora = timezone.now()
+        ts = ahora.strftime('%Y%m%d_%H%M%S')
+
         data = {}
-        data['fecha'] = timezone.now().isoformat()
-        data['productos'] = list(Producto.objects.values())
-        data['clientes'] = list(Cliente.objects.values())
-        data['ventas'] = list(Venta.objects.values())
-        data['item_ventas'] = list(ItemVenta.objects.values())
-        data['movimientos_caja'] = list(MovimientoCaja.objects.values())
-        data['presupuestos'] = list(Presupuesto.objects.values())
-        data['item_presupuestos'] = list(ItemPresupuesto.objects.values())
-        # Incluir historial de precios (lo mas valioso)
         try:
-            from equipamientos.models import ProductoHistorial
-            data['historial_precios'] = list(ProductoHistorial.objects.values()[:1000])
-        except:
-            data['historial_precios'] = []
+            data['clientes'] = list(Cliente.objects.values())
+            data['productos'] = list(Producto.objects.values())
+            data['presupuestos'] = list(Presupuesto.objects.values())
+            data['items_presupuesto'] = list(ItemPresupuesto.objects.values())
+            data['listas_precio'] = list(ListaPrecio.objects.values())
+            data['items_lista_precio'] = list(ItemListaPrecio.objects.values())
+            data['ventas'] = list(Venta.objects.values())
+            data['items_venta'] = list(ItemVenta.objects.values())
+            data['movimientos_caja'] = list(MovimientoCaja.objects.values())
+            try:
+                from equipamientos.models import ProductoHistorial
+                data['historial_precios'] = list(ProductoHistorial.objects.values().order_by('-fecha')[:1000])
+            except:
+                pass
+        except Exception as e:
+            self.stderr.write(f"Error recolectando: {e}")
+            data['error'] = str(e)
 
-        dump_name = f"backup_halcon_{timezone.now().strftime('%Y%m%d_%H%M%S')}_{tipo}.json.gz"
-        dump_path = os.path.join('/tmp', dump_name)
-        
-        json_str = json.dumps(data, default=str, ensure_ascii=False)
-        
-        with gzip.open(dump_path, 'wt', encoding='utf-8') as f:
-            f.write(json_str)
+        n_productos = len(data.get('productos', []))
+        n_ventas = len(data.get('ventas', []))
+        n_clientes = len(data.get('clientes', []))
 
-        size_kb = os.path.getsize(dump_path) / 1024
+        json_str = json.dumps(data, default=str, ensure_ascii=False, indent=2)
+        json_bytes = json_str.encode('utf-8')
+        gz_buffer = BytesIO()
+        with gzip.GzipFile(fileobj=gz_buffer, mode='wb') as gz:
+            gz.write(json_bytes)
+        gz_bytes = gz_buffer.getvalue()
+        tam_kb = len(gz_bytes) / 1024
+        nombre = f"backup_halcon_{ts}_{tipo}.json.gz"
 
-        # Guardar registro en DB
         try:
-            from equipamientos.models import BackupAutomatico
             BackupAutomatico.objects.create(
                 tipo=tipo,
-                archivo_nombre=dump_name,
-                archivo_json=json_str[:500000],
-                cantidad_productos=len(data['productos']),
-                cantidad_ventas=len(data['ventas']),
-                cantidad_clientes=len(data['clientes']),
-                tamano_kb=size_kb,
-                estado='OK',
-                nota=f"Backup {tipo} - {len(data['ventas'])} ventas - Drive: intento"
+                archivo_nombre=nombre,
+                archivo_json=gz_bytes,
+                cantidad_productos=n_productos,
+                cantidad_clientes=n_clientes,
+                cantidad_ventas=n_ventas,
+                tamano_kb=round(tam_kb,2)
             )
-            self.stdout.write(self.style.SUCCESS(f"Backup guardado en DB: {dump_name} - {size_kb:.1f}KB"))
+            self.stdout.write(self.style.SUCCESS(f"Backup DB OK: {nombre} - {tam_kb:.1f}KB Prod:{n_productos}"))
         except Exception as e:
-            self.stdout.write(self.style.WARNING(f"No se pudo guardar registro en DB: {e}"))
+            self.stderr.write(f"Error DB: {e}")
 
-        # Subir a Drive (si esta configurado)
-        drive_ok = upload_to_drive(dump_path, dump_name)
-        if drive_ok:
-            self.stdout.write(self.style.SUCCESS("✅ Backup subido a Google Drive"))
+        tmp_path = f"/tmp/{nombre}"
+        try:
+            with open(tmp_path, 'wb') as f:
+                f.write(gz_bytes)
+        except:
+            tmp_path = os.path.join(os.getcwd(), nombre)
+            with open(tmp_path, 'wb') as f:
+                f.write(gz_bytes)
+
+        ok = self.subir_a_drive_oauth(tmp_path, nombre)
+        if ok:
+            self.stdout.write(self.style.SUCCESS("✅ Subido a Drive con OAuth"))
         else:
-            self.stdout.write(self.style.WARNING("Backup solo local (configura Drive para externo)"))
+            self.stdout.write(self.style.WARNING("⚠️ No se subió a Drive - revisa variables OAuth"))
 
-        return dump_path
+    def subir_a_drive_oauth(self, file_path, file_name):
+        folder_id = os.environ.get('GOOGLE_DRIVE_FOLDER_ID')
+        client_id = os.environ.get('GOOGLE_OAUTH_CLIENT_ID')
+        client_secret = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET')
+        refresh_token = os.environ.get('GOOGLE_OAUTH_REFRESH_TOKEN')
+
+        if not folder_id or not client_id or not client_secret or not refresh_token:
+            print("Faltan variables OAuth: GOOGLE_DRIVE_FOLDER_ID, CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN")
+            return False
+        try:
+            from google.oauth2.credentials import Credentials
+            from googleapiclient.discovery import build
+            from googleapiclient.http import MediaFileUpload
+            from google.auth.transport.requests import Request
+
+            creds = Credentials(
+                None,
+                refresh_token=refresh_token,
+                token_uri='https://oauth2.googleapis.com/token',
+                client_id=client_id,
+                client_secret=client_secret,
+                scopes=['https://www.googleapis.com/auth/drive']
+            )
+            creds.refresh(Request())
+            service = build('drive', 'v3', credentials=creds)
+
+            media = MediaFileUpload(file_path, mimetype='application/gzip', resumable=True)
+            metadata = {'name': file_name, 'parents': [folder_id]}
+            file = service.files().create(body=metadata, media_body=media, fields='id').execute()
+            print(f"Drive ID: {file.get('id')}")
+            return True
+        except Exception as e:
+            print(f"Error Drive OAuth: {e}")
+            import traceback; traceback.print_exc()
+            return False
