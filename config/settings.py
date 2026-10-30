@@ -25,7 +25,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'equipamientos',
+    'equipamientos.apps.EquipamientosConfig',
 ]
 
 MIDDLEWARE = [
@@ -69,7 +69,6 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'equipamientos' / 'static']
-# ESTA ES LA CLAVE - sin Manifest para que /static/logo... funcione directo
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
