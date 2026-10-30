@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from django.contrib.auth.models import User
 
 class DatosEmpresa(models.Model):
     direccion = models.CharField(max_length=200, default="Ruta 89 Km. Quimili, SGO")
@@ -25,6 +26,10 @@ class Producto(models.Model):
     stock = models.IntegerField(default=0)
     fecha_ultimo_cambio_precio = models.DateTimeField(null=True, blank=True, verbose_name="Último cambio precio")
     fecha_ultimo_cambio_stock = models.DateTimeField(null=True, blank=True, verbose_name="Último cambio stock")
+    # === CAMPOS NUEVOS SISTEMA SEGURO ===
+    fecha_creacion = models.DateTimeField(auto_now_add=True, null=True)
+    fecha_modificacion = models.DateTimeField(auto_now=True, null=True, db_index=True)
+    modificado_por = models.CharField(max_length=100, blank=True, null=True)
     def __str__(self):
         return f"{self.nombre} ({self.codigo})"
 
@@ -85,7 +90,6 @@ class Venta(models.Model):
     stock_descontado = models.BooleanField(default=False)
     es_directa = models.BooleanField(default=False, help_text="True si es venta sin presupuesto")
     creado = models.DateTimeField(auto_now_add=True, null=True, blank=True)
-    # NUEVO - DESCUENTO
     descuento_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name="Descuento % sobre productos")
     descuento_monto = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Monto descontado")
     subtotal_productos = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Subtotal productos sin descuento")
@@ -99,7 +103,6 @@ class ItemVenta(models.Model):
     producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='items_venta', null=True, blank=True)
     cantidad = models.IntegerField(default=1)
     precio = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    # NUEVO - PRODUCTO MANUAL
     es_manual = models.BooleanField(default=False, verbose_name="Es producto manual sin stock")
     nombre_manual = models.CharField(max_length=250, blank=True, default="", verbose_name="Nombre manual")
     def __str__(self):
@@ -161,7 +164,7 @@ class ConfigSistema(models.Model):
 
 class BackupAutomatico(models.Model):
     fecha = models.DateTimeField(default=timezone.now)
-    tipo = models.CharField(max_length=20, default='AUTO') # AUTO, VENTA, MANUAL, PRECIO
+    tipo = models.CharField(max_length=20, default='AUTO')
     archivo_nombre = models.CharField(max_length=255)
     archivo_json = models.TextField(blank=True)
     cantidad_productos = models.IntegerField(default=0)
@@ -178,11 +181,10 @@ class BackupAutomatico(models.Model):
         return f"{self.fecha.strftime('%d/%m %H:%M')} - {self.tipo} - V:{self.cantidad_ventas} P:{self.cantidad_productos}"
 
 class ProductoHistorial(models.Model):
-    """Historial imborrable de cada cambio de precio/stock - NUNCA SE BORRA"""
     producto = models.ForeignKey('Producto', on_delete=models.CASCADE, related_name='historial', null=True)
     codigo = models.CharField(max_length=100)
     nombre = models.CharField(max_length=300, blank=True)
-    campo = models.CharField(max_length=20) # PRECIO, STOCK
+    campo = models.CharField(max_length=20)
     valor_viejo = models.CharField(max_length=100, blank=True)
     valor_nuevo = models.CharField(max_length=100)
     usuario = models.CharField(max_length=100, default='cliente')
@@ -194,3 +196,36 @@ class ProductoHistorial(models.Model):
 
     def __str__(self):
         return f"{self.fecha.strftime('%d/%m %H:%M')} - {self.codigo} {self.campo}: {self.valor_viejo} -> {self.valor_nuevo}"
+
+
+class BitacoraDiaria(models.Model):
+    TIPO_CHOICES = [
+        ('PRECIO', 'Cambio Precio'),
+        ('STOCK', 'Cambio Stock'),
+        ('VENTA', 'Venta'),
+        ('PRODUCTO_NUEVO', 'Producto Nuevo'),
+        ('PRODUCTO_BORRADO', 'Producto Borrado'),
+        ('CLIENTE', 'Cambio Cliente'),
+        ('CAJA', 'Movimiento Caja'),
+        ('IMPORT', 'Importacion Excel'),
+        ('BACKUP', 'Backup'),
+        ('SESION', 'Inicio/Cierre Sesion'),
+    ]
+    fecha = models.DateTimeField(auto_now_add=True, db_index=True)
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, db_index=True)
+    usuario = models.CharField(max_length=100, blank=True, null=True)
+    codigo_producto = models.CharField(max_length=100, blank=True, null=True, db_index=True)
+    nombre_producto = models.CharField(max_length=255, blank=True, null=True)
+    datos_anterior = models.JSONField(blank=True, null=True)
+    datos_nuevo = models.JSONField(blank=True, null=True)
+    descripcion = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-fecha']
+        indexes = [
+            models.Index(fields=['fecha', 'tipo']),
+            models.Index(fields=['codigo_producto', 'fecha']),
+        ]
+    
+    def __str__(self):
+        return f"{self.fecha.strftime('%d/%m %H:%M')} - {self.tipo} - {self.codigo_producto} - {self.descripcion}"
