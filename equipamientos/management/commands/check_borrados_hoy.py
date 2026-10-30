@@ -1,4 +1,4 @@
-import json, gzip
+import json, gzip, base64
 from io import BytesIO
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -20,18 +20,30 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR("No hay backups en DB"))
             return
 
-        # Cargar ultimo backup
         def load_backup(b):
             try:
                 raw = b.archivo_json
+                # Normalizar a bytes
                 if isinstance(raw, memoryview):
                     raw = raw.tobytes()
+                elif isinstance(raw, str):
+                    # Puede venir como base64 o como latin1
+                    try:
+                        raw = base64.b64decode(raw)
+                    except:
+                        try:
+                            raw = raw.encode('latin1')
+                        except:
+                            raw = raw.encode('utf-8', errors='ignore')
+                
                 bio = BytesIO(raw)
                 with gzip.GzipFile(fileobj=bio, mode='rb') as gz:
                     data = json.loads(gz.read().decode('utf-8'))
                 return data
             except Exception as e:
+                import traceback
                 self.stderr.write(f"Error leyendo {b.archivo_nombre}: {e}")
+                traceback.print_exc()
                 return {}
 
         ultimo = backups[0]
@@ -58,27 +70,27 @@ class Command(BaseCommand):
             for cod in list(borrados)[:100]:
                 p = prods_backup.get(cod, {})
                 self.stdout.write(f"  - {cod} | {p.get('nombre','')} | ${p.get('precio','')}")
-            if len(borrados) > 100:
-                self.stdout.write(f"  ... y {len(borrados)-100} mas")
         else:
             self.stdout.write(self.style.SUCCESS("✅ No se borro ningun producto desde el ultimo backup"))
 
         self.stdout.write("")
         if agregados:
-            self.stdout.write(self.style.SUCCESS(f"🟢 AGREGADOS desde ultimo backup ({len(agregados)}):"))
-            for cod in list(agregados)[:20]:
-                p = prods_actual.get(cod, {})
-                self.stdout.write(f"  + {cod} | {p.get('nombre','')} | ${p.get('precio','')}")
+            self.stdout.write(f"🟢 AGREGADOS desde ultimo backup ({len(agregados)}): solo muestra si hubo error de lectura, ignora si es 0")
 
-        # Revisar si hubo cambios hoy en ProductoHistorial
-        try:
-            from equipamientos.models import ProductoHistorial
-            hoy_hist = list(ProductoHistorial.objects.filter(fecha__date=hoy).order_by('-fecha')[:30])
-            if hoy_hist:
+        # Chequear si hay 2 backups para comparar hoy vs ayer
+        if len(backups) >= 2:
+            anterior = backups[1]
+            data_ant = load_backup(anterior)
+            prods_ant = {p['codigo']: p for p in data_ant.get('productos', [])}
+            cod_ant = set(prods_ant.keys())
+            cod_ult = set(prods_backup.keys())
+            borr_ayer_hoy = cod_ant - cod_ult
+            if borr_ayer_hoy:
                 self.stdout.write("")
-                self.stdout.write(f"📜 Historial de precios de HOY {hoy}:")
-                for h in hoy_hist:
-                    prod_code = getattr(h.producto, 'codigo', str(h.producto_id))
-                    self.stdout.write(f"  {h.fecha.strftime('%H:%M')} - {prod_code} - {h.accion if hasattr(h,'accion') else ''} {getattr(h,'precio_anterior','')} -> {getattr(h,'precio_nuevo','')}")
-        except Exception as e:
-            self.stdout.write(f"Sin historial o error: {e}")
+                self.stdout.write(self.style.ERROR(f"🔴 BORRADOS entre backup anterior y ultimo ({len(borr_ayer_hoy)}):"))
+                for cod in list(borr_ayer_hoy)[:50]:
+                    p = prods_ant.get(cod, {})
+                    self.stdout.write(f"  - {cod} | {p.get('nombre','')}")
+            else:
+                self.stdout.write("")
+                self.stdout.write(self.style.SUCCESS("✅ Entre los ultimos 2 backups no se borro nada"))
