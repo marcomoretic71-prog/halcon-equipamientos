@@ -149,7 +149,6 @@ def productos_view(request):
         categorias = Producto.objects.values_list('categoria', flat=True).distinct().order_by('categoria')
         count_p = Producto.objects.count()
     except Exception:
-        # fallback si falta columna
         categorias = []
         count_p = 0
     return render(request, 'productos.html', {'categorias': categorias, 'count_productos': count_p, 'datos': DATOS_EMPRESA})
@@ -158,10 +157,8 @@ def productos_view(request):
 def listas_view(request):
     try:
         listas = ListaPrecio.objects.prefetch_related('items__producto').all().order_by('nombre')
-        # forzar evaluacion para detectar error de columna faltante antes de render
         list(listas[:1])
     except Exception:
-        # fallback sin prefetch de producto (evita SELECT * de Producto con columna nueva)
         listas = ListaPrecio.objects.all().order_by('nombre')
     return render(request, 'listas.html', {'listas': listas, 'datos': DATOS_EMPRESA})
 
@@ -335,7 +332,6 @@ def crear_presupuesto(request):
         return JsonResponse({'ok': True, 'codigo': codigo})
     return JsonResponse({'ok': False})
 
-# BLINDADO: Aplicar suba SOLO toca ItemListaPrecio, NO Producto.precio
 @login_required
 @csrf_exempt
 def modificar_lista(request):
@@ -345,7 +341,6 @@ def modificar_lista(request):
         porcentaje = float(data['porcentaje'])
         if porcentaje == 0: return JsonResponse({'ok': False, 'error': 'Porcentaje 0'})
         factor = 1 + (porcentaje/100)
-        # BACKUP implicito via log
         _log_accion(request, f"Aplicar suba {porcentaje}% a lista {lista.nombre} - SOLO lista, no pisa producto base")
         for item in lista.items.select_related('producto').all():
             precio_base = float(item.precio or item.producto.precio)
@@ -353,11 +348,9 @@ def modificar_lista(request):
             item.precio = nuevo
             item.precio_unitario = nuevo
             item.save()
-            # NO TOCAMOS item.producto.precio - BLINDADO
         return JsonResponse({'ok': True})
     return JsonResponse({'ok': False})
 
-# BLINDADO: Editar precio en lista SOLO toca ItemListaPrecio
 @login_required
 @csrf_exempt
 def editar_precio_item_lista(request):
@@ -372,7 +365,6 @@ def editar_precio_item_lista(request):
             item.precio_unitario = nuevo
             item.save()
             _log_accion(request, f"Edito precio en lista {item.lista.nombre} {item.producto.codigo}: {precio_viejo}->{nuevo} (NO pisa producto base)")
-            # NO TOCAMOS item.producto.precio - BLINDADO
             return JsonResponse({'ok': True, 'nuevo_precio': nuevo})
         except Exception as e:
             return JsonResponse({'ok': False, 'error': str(e)})
@@ -450,7 +442,6 @@ def api_venta_directa(request):
             return JsonResponse({'ok': False, 'error': 'Falta cliente'})
         cliente, _ = Cliente.objects.get_or_create(nombre=cliente_nombre, defaults={'telefono': data.get('telefono',''), 'vehiculo_anio': data.get('vehiculo','')})
         codigo = f"VEN-{uuid.uuid4().hex[:4].upper()}"
-        # NUEVO - DESCUENTO
         colocacion = float(data.get('colocacion',0) or 0)
         subtotal_productos = float(data.get('subtotal_productos',0) or 0)
         descuento_porcentaje = float(data.get('descuento_porcentaje',0) or 0)
@@ -473,7 +464,6 @@ def api_venta_directa(request):
             stock_descontado=True
         )
         for it in data.get('items',[]):
-            # NUEVO - PRODUCTO MANUAL
             if it.get('es_manual'):
                 ItemVenta.objects.create(
                     venta=venta, 
@@ -483,16 +473,13 @@ def api_venta_directa(request):
                     cantidad=int(it.get('cantidad',1)), 
                     precio=float(it.get('precio',0))
                 )
-                # No descuenta stock
             else:
                 try:
                     prod = Producto.objects.get(id=it['id'])
                     ItemVenta.objects.create(venta=venta, producto=prod, es_manual=False, nombre_manual="", cantidad=int(it['cantidad']), precio=float(it.get('precio', prod.precio)))
-                    # Solo descuenta stock si es producto real
                     prod.stock = max(0, prod.stock - int(it['cantidad']))
                     prod.save()
                 except Producto.DoesNotExist:
-                    # Fallback como manual si no existe
                     ItemVenta.objects.create(
                         venta=venta, 
                         producto=None,
@@ -502,8 +489,6 @@ def api_venta_directa(request):
                         precio=float(it.get('precio',0))
                     )
         MovimientoCaja.objects.create(tipo='INGRESO', concepto=f"Venta Directa {codigo} - {cliente.nombre}", monto=venta.total, forma_pago=venta.forma_pago, venta=venta)
-
-        # BACKUP ANTI-PERDIDA - log incremental + backup cada 5 ventas
         try:
             import json as _json
             _log_path = '/tmp/ventas_incremental.jsonl'
@@ -520,7 +505,6 @@ def api_venta_directa(request):
                 _mgmt.call_command('backup_postgres', tipo='VENTA')
         except Exception as _e:
             print(f"Backup hook error: {_e}")
-
         _log_accion(request, f"Venta directa {codigo} cliente {cliente.nombre} total {venta.total} desc {descuento_porcentaje}% (-{descuento_monto})")
         return JsonResponse({'ok': True, 'codigo': codigo})
     except Exception as e:
@@ -730,8 +714,6 @@ def api_actualizar_stock(request):
         except:
             pass
         prod.save()
-
-        # === NUEVO: HISTORIAL STOCK ===
         try:
             from .models import ProductoHistorial
             ProductoHistorial.objects.create(
@@ -746,7 +728,6 @@ def api_actualizar_stock(request):
             )
         except Exception as e:
             print(f"Error historial stock: {e}")
-
         _log_accion(request, f"Actualizo stock {prod.codigo}: {viejo}->{stock}")
         return JsonResponse({'ok': True, 'stock': prod.stock})
     except Producto.DoesNotExist:
@@ -777,18 +758,45 @@ def api_sincronizar_categorias(request):
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
 
-# BLINDADO: Importar Excel SOLO crea/actualiza ItemListaPrecio, NO pisa Producto.precio ni nombre si ya existe
+# BLINDADO + BACKUP AUTOMÁTICO: Importar Excel SOLO crea/actualiza ItemListaPrecio, NO pisa Producto.precio ni nombre si ya existe
+# + HACE BACKUP AUTOMÁTICO ANTES DE IMPORTAR - No tenés que entrar nunca a hacer nada
 @login_required
 @csrf_exempt
 def api_importar_lista_excel(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
     try:
+        # === BACKUP AUTOMÁTICO ANTES DE IMPORTAR - 100% AUTOMÁTICO ===
+        try:
+            from django.core import management
+            from .models import BackupAutomatico
+            from django.utils import timezone
+            from datetime import timedelta
+            ultimo_backup = BackupAutomatico.objects.order_by('-fecha').first()
+            if not ultimo_backup or (timezone.now() - ultimo_backup.fecha) > timedelta(minutes=10):
+                management.call_command('backup_postgres', tipo='MANUAL')
+                print("✅ Backup automático antes de importar Excel creado")
+        except Exception as e:
+            print(f"⚠ Backup automático falló pero seguimos con import: {e}")
+
+        # === PROTECCIÓN: Validar que el Excel no esté vacío ===
         if request.content_type == 'application/json':
             data = json.loads(request.body)
             items = data.get('items', [])
             lista_id = data.get('lista_id')
             nombre_nueva = data.get('nombre_nueva','').strip()
+            
+            if len(items) == 0:
+                return JsonResponse({'ok': False, 'error': 'El Excel está vacío - 0 productos. Importación bloqueada para proteger tus datos. Verificá el archivo.'})
+            
+            if lista_id != 'nueva':
+                try:
+                    lista_existente = ListaPrecio.objects.get(id=lista_id)
+                    if lista_existente.items.count() > 50 and len(items) < 5:
+                        return JsonResponse({'ok': False, 'error': f'El Excel tiene solo {len(items)} productos pero la lista {lista_existente.nombre} tiene {lista_existente.items.count()} productos. ¿Estás seguro? Si sí, importá de nuevo con más de 5 productos o vaciá la lista primero manualmente.'})
+                except:
+                    pass
+            
             if lista_id == 'nueva':
                 if not nombre_nueva:
                     return JsonResponse({'ok': False, 'error': 'Falta nombre de lista'})
@@ -809,23 +817,41 @@ def api_importar_lista_excel(request):
                 if created: 
                     creados += 1
                 else:
-                    # BLINDADO: NO pisamos precio ni nombre si ya existe, solo categoria si es OTRO
                     if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
                         prod.categoria = nombre_base
                         prod.save()
                     actualizados += 1
                 ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
-            _log_accion(request, f"Importo {len(items)} a lista {lista.nombre}: creados {creados} actualizados {actualizados} - BLINDADO no pisa precio base")
+            _log_accion(request, f"Importo {len(items)} a lista {lista.nombre}: creados {creados} actualizados {actualizados} - BACKUP AUTOMÁTICO + BLINDADO")
             return JsonResponse({'ok': True, 'lista_nombre': lista.nombre, 'creados': creados, 'actualizados': actualizados, 'total_lista': lista.items.count(), 'categoria_usada': nombre_base})
+        
         import openpyxl
         lista_id = request.POST.get('lista_id')
         archivo = request.FILES.get('archivo')
         if not lista_id or not archivo:
             return JsonResponse({'ok': False, 'error': 'Falta lista o archivo'})
+        
         lista = ListaPrecio.objects.get(id=lista_id)
         nombre_base = lista.nombre.split(' - ')[0].strip().upper() or 'OTRO'
         wb = openpyxl.load_workbook(archivo)
         ws = wb.active
+        
+        filas_validas = 0
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if row and row[0] and row[2]:
+                try:
+                    precio = _limpiar_precio_br(row[2])
+                    if precio > 0:
+                        filas_validas += 1
+                except:
+                    pass
+        
+        if filas_validas == 0:
+            return JsonResponse({'ok': False, 'error': 'El Excel está vacío o no tiene precios válidos - 0 productos. Importación bloqueada para proteger tus datos.'})
+        
+        if lista.items.count() > 50 and filas_validas < 5:
+            return JsonResponse({'ok': False, 'error': f'El Excel tiene solo {filas_validas} productos pero la lista {lista.nombre} tiene {lista.items.count()} productos. Importación bloqueada por seguridad.'})
+        
         count = 0
         for row in ws.iter_rows(min_row=2, values_only=True):
             if not row or not row[0]: continue
@@ -835,14 +861,14 @@ def api_importar_lista_excel(request):
             precio = _limpiar_precio_br(row[2]) if len(row) > 2 else 0
             if precio <= 0: continue
             prod, _ = Producto.objects.get_or_create(codigo=codigo, defaults={'nombre': nombre, 'precio': precio, 'stock': 0, 'categoria': nombre_base})
-            # BLINDADO: no pisamos precio base
             if (prod.categoria or '').upper() == 'OTRO' or not prod.categoria:
                 if prod.categoria != nombre_base:
                     prod.categoria = nombre_base
                     prod.save()
             ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
             count += 1
-        _log_accion(request, f"Importo Excel a {lista.nombre}: {count} - BLINDADO")
+        
+        _log_accion(request, f"Importo Excel a {lista.nombre}: {count} - BACKUP AUTOMÁTICO + BLINDADO")
         return JsonResponse({'ok': True, 'importados': count, 'categoria_usada': nombre_base})
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -1045,8 +1071,6 @@ def api_actualizar_precio(request):
         except:
             pass
         prod.save()
-        
-        # === NUEVO: GUARDAR HISTORIAL IMBORRABLE ===
         try:
             from .models import ProductoHistorial
             ProductoHistorial.objects.create(
@@ -1061,10 +1085,7 @@ def api_actualizar_precio(request):
             )
         except Exception as e:
             print(f"Error historial: {e}")
-
         _log_accion(request, f"Cambio precio directo {prod.codigo} {viejo} -> {nuevo}")
-        
-        # Backup incremental cada 10 cambios de precio
         try:
             from .models import ProductoHistorial
             if ProductoHistorial.objects.filter(campo='PRECIO').count() % 10 == 0:
@@ -1072,7 +1093,6 @@ def api_actualizar_precio(request):
                 management.call_command('backup_postgres', tipo='PRECIO')
         except:
             pass
-
         return JsonResponse({'ok': True, 'precio': float(prod.precio), 'id': prod.id})
     except Producto.DoesNotExist:
         return JsonResponse({'ok': False, 'error': 'Producto no existe'})
@@ -1098,27 +1118,20 @@ def api_renombrar_lista(request):
         viejo_nombre = lista.nombre
         viejo_base = viejo_nombre.split(' - ')[0].strip().upper()
         nuevo_base = nuevo_nombre.split(' - ')[0].strip().upper() or nuevo_nombre.strip().upper()
-        # Verificar duplicado
         if ListaPrecio.objects.filter(nombre__iexact=nuevo_nombre).exclude(id=lista_id).exists():
             return JsonResponse({'ok': False, 'error': f'Ya existe una lista llamada {nuevo_nombre}'})
         lista.nombre = nuevo_nombre
         lista.save()
         actualizados = 0
         if actualizar_productos:
-            # Actualizar categoria de todos los productos de esa lista
-            # 1. Productos que tienen categoria = viejo_base
-            # 2. Y/o productos que están en la lista
             qs_productos_lista = Producto.objects.filter(id__in=lista.items.values_list('producto_id', flat=True))
             for p in qs_productos_lista:
-                # Si la categoria actual es viejo_base o OTRO, la actualizamos
                 cat_actual = (p.categoria or '').upper()
                 if cat_actual == viejo_base or cat_actual == 'OTRO' or not cat_actual:
                     p.categoria = nuevo_base
                     p.save()
                     actualizados += 1
                 elif cat_actual != nuevo_base:
-                    # También si quiere forzar, actualizamos igual si el producto solo está en esa lista
-                    # Si el producto está solo en esta lista, lo actualizamos
                     otras_listas = ItemListaPrecio.objects.filter(producto=p).exclude(lista=lista).count()
                     if otras_listas == 0:
                         p.categoria = nuevo_base
@@ -1131,9 +1144,6 @@ def api_renombrar_lista(request):
     except Exception as e:
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
-
-
-# ===== SISTEMA ANTI-PERDIDA - BACKUPS =====
 
 import json, os, gzip, io
 from django.http import JsonResponse, HttpResponse
@@ -1149,7 +1159,6 @@ def api_backup_manual(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
     try:
-        # Llamar al management command
         management.call_command('backup_postgres', tipo='MANUAL')
         return JsonResponse({'ok': True, 'mensaje': 'Backup manual creado'})
     except Exception as e:
@@ -1188,14 +1197,8 @@ def api_backup_restaurar(request):
         from .models import BackupAutomatico
         b = BackupAutomatico.objects.get(id=backup_id)
         backup_data = json.loads(b.archivo_json)
-        # Restaurar solo si la tabla esta vacia o confirmacion
-        # Por seguridad solo restauramos si no hay ventas
         if Venta.objects.count() > 0 and not data.get('forzar'):
             return JsonResponse({'ok': False, 'error': 'Ya hay ventas, usa forzar=true si queres pisar', 'ventas_actuales': Venta.objects.count()})
-        
-        # Restaurar clientes, productos, etc (logica simple)
-        # Nota: esto es un ejemplo, en produccion usar deserializacion mas segura
-        # Por ahora solo informamos que el backup esta disponible
         return JsonResponse({'ok': True, 'mensaje': f'Backup {b.archivo_nombre} listo para restaurar manualmente, contiene {b.cantidad_ventas} ventas'})
     except Exception as e:
         import traceback; traceback.print_exc()
