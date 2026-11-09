@@ -39,17 +39,15 @@ def dashboard(request):
     ventas_qs = Venta.objects.select_related('cliente').order_by('-fecha_venta')
     ventas_recientes = ventas_qs[:15]
     presupuestos = Presupuesto.objects.select_related('cliente').order_by('-creado')[:10]
+    # FIX 09/11: Presupuesto NUNCA cuenta como venta ni como caja.
+    # Solo Venta suma a total_acum / total_mes / count. Si no hay ventas, queda en 0.
     total_acum = ventas_qs.aggregate(Sum('total'))['total__sum'] or 0
     total_mes = ventas_qs.filter(fecha_venta__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
     count_mes = ventas_qs.filter(fecha_venta__gte=hace_30).count()
     count_total = ventas_qs.count()
-    if count_total == 0:
-        total_acum = Presupuesto.objects.aggregate(Sum('total'))['total__sum'] or 0
-        total_mes = Presupuesto.objects.filter(creado__gte=hace_30).aggregate(Sum('total'))['total__sum'] or 0
-        count_mes = Presupuesto.objects.filter(creado__gte=hace_30).count()
-        count_total = Presupuesto.objects.count()
     ticket_prom = total_acum / count_total if count_total else 0
-    top_productos = ItemPresupuesto.objects.values('producto__codigo','producto__nombre').annotate(veces=Count('id')).order_by('-veces')[:5]
+    # Top 5 solo de ventas reales, no de presupuestos
+    top_productos = ItemVenta.objects.values('producto__codigo','producto__nombre').annotate(veces=Count('id')).order_by('-veces')[:5]
     try:
         stock_bajo = Producto.objects.filter(stock__lte=3).order_by('stock')[:10]
     except Exception:
