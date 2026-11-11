@@ -405,7 +405,7 @@ def api_convertir_a_venta(request):
         data = json.loads(request.body)
         codigo_pres = data.get('codigo_presupuesto')
         forma_pago = data.get('forma_pago','EFECTIVO')
-        # NUEVO - VENDEDOR 11/11 - Si no viene, default HALCON para no romper ventas viejas
+        # VENDEDOR - si no viene, default HALCON
         vendedor_raw = str(data.get('vendedor','HALCON') or 'HALCON').strip().upper()
         if vendedor_raw in ['HALCON EQUIPAMIENTOS', 'HALCON', 'HALCÓN', 'HALCÓN EQUIPAMIENTOS']:
             vendedor = 'HALCON'
@@ -455,7 +455,6 @@ def api_venta_directa(request):
         total_original = float(data.get('total_original',0) or data.get('total',0) or 0)
         total_final = float(data.get('total',0) or 0)
         forma_pago = data.get('forma_pago','EFECTIVO')
-        # NUEVO - VENDEDOR 11/11
         vendedor_raw = str(data.get('vendedor','HALCON') or 'HALCON').strip().upper()
         if vendedor_raw in ['HALCON EQUIPAMIENTOS', 'HALCON', 'HALCÓN', 'HALCÓN EQUIPAMIENTOS']:
             vendedor = 'HALCON'
@@ -1221,124 +1220,133 @@ def api_backup_restaurar(request):
 
 @login_required
 def pdf_ventas_mes(request, mes):
-    # mes formato YYYY-MM, ej: 2026-11
     try:
-        year, month = map(int, mes.split('-'))
-    except:
-        return JsonResponse({'ok': False, 'error': 'Mes invalido, usa YYYY-MM'})
-    ventas = Venta.objects.select_related('cliente').filter(fecha_venta__year=year, fecha_venta__month=month).order_by('fecha_venta')
-    total_mes = sum(float(v.total) for v in ventas)
-    count = ventas.count()
-    # Totales por vendedor y por forma de pago
-    total_halcon = sum(float(v.total) for v in ventas if v.vendedor == 'HALCON')
-    total_diaz = sum(float(v.total) for v in ventas if v.vendedor == 'DIAZ')
-    total_sin = total_mes - total_halcon - total_diaz
-    total_efectivo = sum(float(v.total) for v in ventas if v.forma_pago == 'EFECTIVO')
-    total_transfer = sum(float(v.total) for v in ventas if v.forma_pago == 'TRANSFERENCIA')
-    total_otros = total_mes - total_efectivo - total_transfer
-    meses_nombres = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-    mes_nombre = meses_nombres[month] if 1 <= month <= 12 else str(month)
-    response = HttpResponse(content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="Ventas_{mes}.pdf"'
-    p = canvas.Canvas(response, pagesize=A4)
-    w, h = A4
-    d = DATOS_EMPRESA
-    # Header negro
-    p.setFillColorRGB(0.08,0.08,0.08)
-    p.rect(0, h-120, w, 120, fill=1, stroke=0)
-    try:
-        logo_path = os.path.join(settings.BASE_DIR, 'equipamientos', 'static', 'logo_halcon_circular.png')
-        if os.path.exists(logo_path):
-            p.drawImage(ImageReader(logo_path), 35, h-95, width=65, height=65, mask='auto')
-    except: pass
-    p.setFillColorRGB(1,1,1)
-    p.setFont("Helvetica-Bold", 16)
-    p.drawString(115, h-38, "HALCÓN EQUIPAMIENTOS")
-    p.setFont("Helvetica", 9)
-    p.setFillColorRGB(0.9,0.9,0.9)
-    p.drawString(115, h-52, f"{d['direccion']}")
-    p.drawString(115, h-64, f"WhatsApp: {d['whatsapp']}")
-    p.drawString(115, h-76, f"Instagram: @{d['instagram']}")
-    p.setFillColorRGB(1,0.84,0)
-    p.setFont("Helvetica-Bold", 11)
-    p.drawRightString(w-35, h-40, "VENTAS DEL MES")
-    p.setFillColorRGB(1,1,1)
-    p.setFont("Helvetica-Bold", 14)
-    p.drawRightString(w-35, h-56, f"{mes_nombre} {year}")
-    p.setFont("Helvetica", 9)
-    p.setFillColorRGB(0.8,0.8,0.8)
-    p.drawRightString(w-35, h-70, f"{count} ventas - Generado {timezone.now().strftime('%d/%m/%Y %H:%M')}")
-    # Resumen
-    y = h-160
-    p.setFillColorRGB(1,0.84,0)
-    p.roundRect(40, y-8, w-80, 62, 10, fill=1, stroke=0)
-    p.setFillColorRGB(0,0,0)
-    p.setFont("Helvetica-Bold", 12)
-    p.drawString(55, y+32, f"TOTAL DEL MES: ${total_mes:,.2f}")
-    p.setFont("Helvetica", 9)
-    p.drawString(55, y+14, f"Efectivo: ${total_efectivo:,.0f}  |  Transferencia: ${total_transfer:,.0f}  |  Otros: ${total_otros:,.0f}")
-    p.drawString(55, y, f"Halcon Equip.: ${total_halcon:,.0f}  |  Elect. Diaz: ${total_diaz:,.0f}  |  Sin vendedor: ${total_sin:,.0f}")
-    y -= 50
-    # Tabla header
-    p.setFillColorRGB(1,0.84,0)
-    p.rect(40, y-6, w-80, 22, fill=1, stroke=0)
-    p.setFillColorRGB(0,0,0)
-    p.setFont("Helvetica-Bold", 8)
-    p.drawString(45, y+2, "CODIGO")
-    p.drawString(110, y+2, "CLIENTE")
-    p.drawString(255, y+2, "FECHA")
-    p.drawString(320, y+2, "VENDEDOR")
-    p.drawString(410, y+2, "PAGO")
-    p.drawRightString(560, y+2, "TOTAL")
-    y -= 25
-    if count == 0:
-        p.setFillColorRGB(0.4,0.4,0.4)
-        p.setFont("Helvetica", 10)
-        p.drawCentredString(w/2, y, "No hubo ventas en este mes.")
-        y -= 20
-    for idx, v in enumerate(ventas):
-        if y < 120:
-            p.showPage()
-            y = h-50
-            p.setFillColorRGB(1,0.84,0)
-            p.rect(40, y-6, w-80, 22, fill=1, stroke=0)
-            p.setFillColorRGB(0,0,0)
+        try:
+            year, month = map(int, str(mes).split('-'))
+            if not (1 <= month <= 12):
+                raise ValueError("mes")
+        except Exception:
+            return JsonResponse({'ok': False, 'error': 'Mes invalido, usa YYYY-MM'}, status=400)
+        ventas = list(Venta.objects.select_related('cliente').filter(fecha_venta__year=year, fecha_venta__month=month).order_by('fecha_venta'))
+        def _vend(v):
+            return getattr(v, 'vendedor', None) or ''
+        def _tot(v):
+            try:
+                return float(v.total or 0)
+            except Exception:
+                return 0
+        total_mes = sum(_tot(v) for v in ventas)
+        count = len(ventas)
+        total_halcon = sum(_tot(v) for v in ventas if _vend(v) == 'HALCON')
+        total_diaz = sum(_tot(v) for v in ventas if _vend(v) == 'DIAZ')
+        total_sin = total_mes - total_halcon - total_diaz
+        total_efectivo = sum(_tot(v) for v in ventas if getattr(v, 'forma_pago', '') == 'EFECTIVO')
+        total_transfer = sum(_tot(v) for v in ventas if getattr(v, 'forma_pago', '') == 'TRANSFERENCIA')
+        total_otros = total_mes - total_efectivo - total_transfer
+        meses_nombres = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+        mes_nombre = meses_nombres[month]
+        response = HttpResponse(content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="Ventas_{mes}.pdf"'
+        p = canvas.Canvas(response, pagesize=A4)
+        w, h = A4
+        d = DATOS_EMPRESA
+        p.setFillColorRGB(0.08, 0.08, 0.08)
+        p.rect(0, h-120, w, 120, fill=1, stroke=0)
+        try:
+            logo_path = os.path.join(settings.BASE_DIR, 'equipamientos', 'static', 'logo_halcon_circular.png')
+            if os.path.exists(logo_path):
+                p.drawImage(ImageReader(logo_path), 35, h-95, width=65, height=65, mask='auto')
+        except Exception:
+            pass
+        p.setFillColorRGB(1, 1, 1)
+        p.setFont("Helvetica-Bold", 16)
+        p.drawString(115, h-38, "HALCON EQUIPAMIENTOS")
+        p.setFont("Helvetica", 9)
+        p.setFillColorRGB(0.9, 0.9, 0.9)
+        p.drawString(115, h-52, str(d.get('direccion', '')))
+        p.drawString(115, h-64, f"WhatsApp: {d.get('whatsapp', '')}")
+        p.drawString(115, h-76, f"Instagram: @{d.get('instagram', '')}")
+        p.setFillColorRGB(1, 0.84, 0)
+        p.setFont("Helvetica-Bold", 11)
+        p.drawRightString(w-35, h-40, "VENTAS DEL MES")
+        p.setFillColorRGB(1, 1, 1)
+        p.setFont("Helvetica-Bold", 14)
+        p.drawRightString(w-35, h-56, f"{mes_nombre} {year}")
+        p.setFont("Helvetica", 9)
+        p.setFillColorRGB(0.8, 0.8, 0.8)
+        p.drawRightString(w-35, h-70, f"{count} ventas - Generado {timezone.now().strftime('%d/%m/%Y %H:%M')}")
+        y = h-160
+        p.setFillColorRGB(1, 0.84, 0)
+        p.roundRect(40, y-8, w-80, 62, 10, fill=1, stroke=0)
+        p.setFillColorRGB(0, 0, 0)
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(55, y+32, f"TOTAL DEL MES: ${total_mes:,.2f}")
+        p.setFont("Helvetica", 9)
+        p.drawString(55, y+14, f"Efectivo: ${total_efectivo:,.0f}  |  Transferencia: ${total_transfer:,.0f}  |  Otros: ${total_otros:,.0f}")
+        p.drawString(55, y, f"Halcon Equip.: ${total_halcon:,.0f}  |  Elect. Diaz: ${total_diaz:,.0f}  |  Sin vendedor: ${total_sin:,.0f}")
+        y -= 50
+        def _header(yy):
+            p.setFillColorRGB(1, 0.84, 0)
+            p.rect(40, yy-6, w-80, 22, fill=1, stroke=0)
+            p.setFillColorRGB(0, 0, 0)
             p.setFont("Helvetica-Bold", 8)
-            p.drawString(45, y+2, "CODIGO")
-            p.drawString(110, y+2, "CLIENTE")
-            p.drawString(255, y+2, "FECHA")
-            p.drawString(320, y+2, "VENDEDOR")
-            p.drawString(410, y+2, "PAGO")
-            p.drawRightString(560, y+2, "TOTAL")
-            y -= 25
-        if idx % 2 == 0:
-            p.setFillColorRGB(0.96,0.96,0.96)
-            p.rect(40, y-4, w-80, 16, fill=1, stroke=0)
-        p.setFillColorRGB(0,0,0)
+            p.drawString(45, yy+2, "CODIGO")
+            p.drawString(110, yy+2, "CLIENTE")
+            p.drawString(255, yy+2, "FECHA")
+            p.drawString(320, yy+2, "VENDEDOR")
+            p.drawString(410, yy+2, "PAGO")
+            p.drawRightString(560, yy+2, "TOTAL")
+            return yy - 25
+        y = _header(y)
+        if count == 0:
+            p.setFillColorRGB(0.4, 0.4, 0.4)
+            p.setFont("Helvetica", 10)
+            p.drawCentredString(w/2, y, "No hubo ventas en este mes.")
+            y -= 20
+        for idx, v in enumerate(ventas):
+            if y < 120:
+                p.showPage()
+                y = h-50
+                y = _header(y)
+            if idx % 2 == 0:
+                p.setFillColorRGB(0.96, 0.96, 0.96)
+                p.rect(40, y-4, w-80, 16, fill=1, stroke=0)
+            p.setFillColorRGB(0, 0, 0)
+            p.setFont("Helvetica", 8.5)
+            vend = "Halcon" if _vend(v) == 'HALCON' else ("Diaz" if _vend(v) == 'DIAZ' else "-")
+            try:
+                cliente_nombre = v.cliente.nombre if getattr(v, 'cliente', None) else ""
+            except Exception:
+                cliente_nombre = ""
+            try:
+                fecha_txt = v.fecha_venta.strftime('%d/%m %H:%M') if getattr(v, 'fecha_venta', None) else ""
+            except Exception:
+                fecha_txt = ""
+            p.drawString(45, y, str(getattr(v, 'codigo', ''))[:12])
+            p.drawString(110, y, str(cliente_nombre)[:26])
+            p.drawString(255, y, fecha_txt)
+            p.drawString(320, y, vend)
+            p.drawString(410, y, str(getattr(v, 'forma_pago', ''))[:10])
+            p.drawRightString(560, y, f"${_tot(v):,.0f}")
+            y -= 16
+        y -= 12
+        p.setStrokeColorRGB(0.8, 0.8, 0.8)
+        p.line(340, y, w-40, y)
+        y -= 18
+        p.setFont("Helvetica-Bold", 11)
+        p.setFillColorRGB(0, 0, 0)
+        p.drawRightString(460, y, "TOTAL MES:")
+        p.drawRightString(560, y, f"${total_mes:,.0f}")
+        y -= 30
         p.setFont("Helvetica", 8.5)
-        vend = "Halcon" if v.vendedor == 'HALCON' else ("Diaz" if v.vendedor == 'DIAZ' else "-")
-        p.drawString(45, y, v.codigo[:12])
-        p.drawString(110, y, v.cliente.nombre[:26])
-        p.drawString(255, y, v.fecha_venta.strftime('%d/%m %H:%M'))
-        p.drawString(320, y, vend)
-        p.drawString(410, y, v.forma_pago[:10])
-        p.drawRightString(560, y, f"${float(v.total):,.0f}")
-        y -= 16
-    y -= 12
-    p.setStrokeColorRGB(0.8,0.8,0.8)
-    p.line(340, y, w-40, y)
-    y -= 18
-    p.setFont("Helvetica-Bold", 11)
-    p.setFillColorRGB(0,0,0)
-    p.drawRightString(460, y, "TOTAL MES:")
-    p.drawRightString(560, y, f"${total_mes:,.0f}")
-    y -= 30
-    p.setFont("Helvetica", 8.5)
-    p.setFillColorRGB(0.3,0.3,0.3)
-    p.drawString(40, y, f"Alias: {d['alias']} | {d['direccion']}")
-    p.setFont("Helvetica-Bold", 8)
-    p.setFillColorRGB(0.5,0.5,0.5)
-    p.drawCentredString(w/2, 40, d['footer'])
-    p.showPage()
-    p.save()
-    return response
+        p.setFillColorRGB(0.3, 0.3, 0.3)
+        p.drawString(40, y, f"Alias: {d.get('alias', '')} | {d.get('direccion', '')}")
+        p.setFont("Helvetica-Bold", 8)
+        p.setFillColorRGB(0.5, 0.5, 0.5)
+        p.drawCentredString(w/2, 40, "Gracias por confiar en HALCON EQUIPAMIENTOS!")
+        p.showPage()
+        p.save()
+        return response
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)}, status=500)
