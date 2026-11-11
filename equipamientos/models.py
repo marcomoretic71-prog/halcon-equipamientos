@@ -26,7 +26,6 @@ class Producto(models.Model):
     stock = models.IntegerField(default=0)
     fecha_ultimo_cambio_precio = models.DateTimeField(null=True, blank=True, verbose_name="Último cambio precio")
     fecha_ultimo_cambio_stock = models.DateTimeField(null=True, blank=True, verbose_name="Último cambio stock")
-    # === CAMPOS NUEVOS SISTEMA SEGURO ===
     fecha_creacion = models.DateTimeField(auto_now_add=True, null=True)
     fecha_modificacion = models.DateTimeField(auto_now=True, null=True, db_index=True)
     modificado_por = models.CharField(max_length=100, blank=True, null=True)
@@ -79,6 +78,11 @@ class Venta(models.Model):
         ('CUENTA_CORRIENTE', 'Cuenta Corriente'),
         ('MERCADOPAGO', 'MercadoPago'),
     ]
+    # NUEVO - VENDEDORES - 11/11/2026 - No rompe ventas viejas (null=True)
+    VENDEDORES_CHOICES = [
+        ('HALCON', 'Halcon Equipamientos'),
+        ('DIAZ', 'Electromecánica Diaz'),
+    ]
     codigo = models.CharField(max_length=20, unique=True)
     presupuesto = models.OneToOneField(Presupuesto, on_delete=models.SET_NULL, null=True, blank=True, related_name='venta')
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT)
@@ -86,6 +90,7 @@ class Venta(models.Model):
     colocacion = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Mano de obra / Instalación")
     total = models.DecimalField(max_digits=12, decimal_places=2)
     forma_pago = models.CharField(max_length=20, choices=FORMA_PAGO_CHOICES, default='EFECTIVO')
+    vendedor = models.CharField(max_length=20, choices=VENDEDORES_CHOICES, blank=True, null=True, help_text="Quién hizo la venta - Halcon Equipamientos o Electromecánica Diaz")
     fecha_venta = models.DateTimeField(auto_now_add=True)
     stock_descontado = models.BooleanField(default=False)
     es_directa = models.BooleanField(default=False, help_text="True si es venta sin presupuesto")
@@ -161,7 +166,6 @@ class ConfigSistema(models.Model):
     def __str__(self):
         return f"Config v{self.version} - {'BLOQUEADO' if self.bloqueado_global else 'OK'}"
 
-
 class BackupAutomatico(models.Model):
     fecha = models.DateTimeField(default=timezone.now)
     tipo = models.CharField(max_length=20, default='AUTO')
@@ -173,10 +177,8 @@ class BackupAutomatico(models.Model):
     tamano_kb = models.FloatField(default=0)
     estado = models.CharField(max_length=20, default='OK')
     nota = models.TextField(blank=True, default='')
-
     class Meta:
         ordering = ['-fecha']
-    
     def __str__(self):
         return f"{self.fecha.strftime('%d/%m %H:%M')} - {self.tipo} - V:{self.cantidad_ventas} P:{self.cantidad_productos}"
 
@@ -190,13 +192,10 @@ class ProductoHistorial(models.Model):
     usuario = models.CharField(max_length=100, default='cliente')
     fecha = models.DateTimeField(default=timezone.now)
     ip = models.CharField(max_length=50, blank=True)
-
     class Meta:
         ordering = ['-fecha']
-
     def __str__(self):
         return f"{self.fecha.strftime('%d/%m %H:%M')} - {self.codigo} {self.campo}: {self.valor_viejo} -> {self.valor_nuevo}"
-
 
 class BitacoraDiaria(models.Model):
     TIPO_CHOICES = [
@@ -219,13 +218,11 @@ class BitacoraDiaria(models.Model):
     datos_anterior = models.JSONField(blank=True, null=True)
     datos_nuevo = models.JSONField(blank=True, null=True)
     descripcion = models.TextField(blank=True, null=True)
-    
     class Meta:
         ordering = ['-fecha']
         indexes = [
             models.Index(fields=['fecha', 'tipo']),
             models.Index(fields=['codigo_producto', 'fecha']),
         ]
-    
     def __str__(self):
         return f"{self.fecha.strftime('%d/%m %H:%M')} - {self.tipo} - {self.codigo_producto} - {self.descripcion}"
