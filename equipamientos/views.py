@@ -405,20 +405,12 @@ def api_convertir_a_venta(request):
         data = json.loads(request.body)
         codigo_pres = data.get('codigo_presupuesto')
         forma_pago = data.get('forma_pago','EFECTIVO')
-        # NUEVO - VENDEDOR 11/11 - Si no viene, default HALCON para no romper ventas viejas
-        vendedor_raw = str(data.get('vendedor','HALCON') or 'HALCON').strip().upper()
-        if vendedor_raw in ['HALCON EQUIPAMIENTOS', 'HALCON', 'HALCÓN', 'HALCÓN EQUIPAMIENTOS']:
-            vendedor = 'HALCON'
-        elif vendedor_raw in ['ELECTROMECÁNICA DIAZ', 'ELECTROMECANICA DIAZ', 'DIAZ', 'ELECTROMECANICA']:
-            vendedor = 'DIAZ'
-        else:
-            vendedor = 'HALCON'
         try:
             pres = Presupuesto.objects.select_related('cliente').prefetch_related('items__producto').get(codigo=codigo_pres)
             if hasattr(pres, 'venta') and pres.venta is not None:
                 return JsonResponse({'ok': False, 'error': 'Este presupuesto ya es una venta'})
             codigo_venta = f"VEN-{uuid.uuid4().hex[:4].upper()}"
-            venta = Venta.objects.create(codigo=codigo_venta, presupuesto=pres, cliente=pres.cliente, vehiculo=pres.vehiculo, colocacion=pres.colocacion, total=pres.total, forma_pago=forma_pago, vendedor=vendedor)
+            venta = Venta.objects.create(codigo=codigo_venta, presupuesto=pres, cliente=pres.cliente, vehiculo=pres.vehiculo, colocacion=pres.colocacion, total=pres.total, forma_pago=forma_pago)
             for item in pres.items.all():
                 prod = item.producto
                 ItemVenta.objects.create(venta=venta, producto=prod, cantidad=item.cantidad, precio=float(item.precio or item.precio_unitario or prod.precio))
@@ -427,7 +419,7 @@ def api_convertir_a_venta(request):
             venta.stock_descontado = True
             venta.save()
             MovimientoCaja.objects.create(tipo='INGRESO', concepto=f"Venta {codigo_venta} - {pres.cliente.nombre}", monto=venta.total, forma_pago=forma_pago, venta=venta)
-            _log_accion(request, f"Convirtio presupuesto {pres.codigo} a venta {codigo_venta} total {venta.total} vendedor {vendedor}")
+            _log_accion(request, f"Convirtio presupuesto {pres.codigo} a venta {codigo_venta} total {venta.total}")
             return JsonResponse({'ok': True, 'codigo_venta': codigo_venta})
         except Presupuesto.DoesNotExist:
             return JsonResponse({'ok': False, 'error': 'Presupuesto no encontrado'})
@@ -455,14 +447,6 @@ def api_venta_directa(request):
         total_original = float(data.get('total_original',0) or data.get('total',0) or 0)
         total_final = float(data.get('total',0) or 0)
         forma_pago = data.get('forma_pago','EFECTIVO')
-        # NUEVO - VENDEDOR 11/11
-        vendedor_raw = str(data.get('vendedor','HALCON') or 'HALCON').strip().upper()
-        if vendedor_raw in ['HALCON EQUIPAMIENTOS', 'HALCON', 'HALCÓN', 'HALCÓN EQUIPAMIENTOS']:
-            vendedor = 'HALCON'
-        elif vendedor_raw in ['ELECTROMECÁNICA DIAZ', 'ELECTROMECANICA DIAZ', 'DIAZ', 'ELECTROMECANICA']:
-            vendedor = 'DIAZ'
-        else:
-            vendedor = 'HALCON'
         venta = Venta.objects.create(
             codigo=codigo, 
             cliente=cliente, 
@@ -473,8 +457,7 @@ def api_venta_directa(request):
             subtotal_productos=subtotal_productos,
             descuento_porcentaje=descuento_porcentaje,
             descuento_monto=descuento_monto,
-            forma_pago=forma_pago,
-            vendedor=vendedor,
+            forma_pago=forma_pago, 
             es_directa=True, 
             stock_descontado=True
         )
@@ -520,7 +503,7 @@ def api_venta_directa(request):
                 _mgmt.call_command('backup_postgres', tipo='VENTA')
         except Exception as _e:
             print(f"Backup hook error: {_e}")
-        _log_accion(request, f"Venta directa {codigo} cliente {cliente.nombre} total {venta.total} vendedor {vendedor} desc {descuento_porcentaje}% (-{descuento_monto})")
+        _log_accion(request, f"Venta directa {codigo} cliente {cliente.nombre} total {venta.total} desc {descuento_porcentaje}% (-{descuento_monto})")
         return JsonResponse({'ok': True, 'codigo': codigo})
     except Exception as e:
         import traceback; traceback.print_exc()
