@@ -64,8 +64,10 @@ body{background:#0f0f0f;color:#e0e0e0;font-family:Inter,system-ui}.navbar{backgr
   <div class="card-dark">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h6 class="mb-0" style="font-weight:800">📋 Historial de Ventas</h6>
-      <div class="d-flex gap-2">
-        <input id="filtroCliente" class="filter-pill" placeholder="🔍 Cliente..." style="width:200px" oninput="filtrarTabla()">
+      <div class="d-flex gap-2 align-items-center">
+        <input id="filtroCliente" class="filter-pill" placeholder="🔍 Cliente..." style="width:180px" oninput="filtrarTabla()">
+        <input id="pdf_mes" type="month" class="filter-pill" style="color-scheme:dark">
+        <button onclick="descargarPDFMes()" style="background:#FFD600;color:#000;font-weight:800;border:none;border-radius:20px;padding:6px 14px;font-size:12px">📄 PDF del Mes</button>
         <span class="badge" style="background:#222;color:#888;border:1px solid #333" id="countFiltrado">{{ count_ventas }} ventas</span>
       </div>
     </div>
@@ -165,6 +167,11 @@ body{background:#0f0f0f;color:#e0e0e0;font-family:Inter,system-ui}.navbar{backgr
   </div>
 </div>
 <script>
+function descargarPDFMes(){
+  let mes = document.getElementById('pdf_mes').value;
+  if(!mes){ alert('Elegí el mes primero'); return; }
+  window.open('/ventas/pdf/' + mes + '/', '_blank');
+}
 function filtrarTabla(){
   let q = document.getElementById('filtroCliente').value.toLowerCase();
   document.querySelectorAll('#tablaVentas tbody tr').forEach(tr=>{

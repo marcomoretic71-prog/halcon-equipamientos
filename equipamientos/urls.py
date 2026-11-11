@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/stock/sumar/', views.api_sumar_stock, name='api_sumar_stock'),
     path('api/stock/reponer_codigo/', views.api_reponer_codigo, name='api_reponer_codigo'),
     path('ventas/', views.ventas_view, name='ventas'),
+    path('ventas/pdf/<str:mes>/', views.pdf_ventas_mes, name='pdf_ventas_mes'),
     path('api/convertir_a_venta/', views.api_convertir_a_venta, name='convertir_venta'),
     path('api/venta_directa/', views.api_venta_directa, name='venta_directa'),
     path('api/caja_movimiento/', views.api_caja_movimiento, name='api_caja_movimiento'),
