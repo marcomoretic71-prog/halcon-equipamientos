@@ -178,9 +178,29 @@ body{background:#0f0f0f;color:#e0e0e0;font-family:Inter}.navbar{background:#1616
     </div>
   </div>
 </div>
+<div id="modalVender" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#1c1c1c;border:1px solid #333;border-radius:18px;padding:24px;width:400px">
+    <h6 style="color:#fff">💰 Vender Presupuesto <span id="modalVenderCodigo" style="color:#FFD600"></span></h6>
+    <input type="hidden" id="vender_codigo">
+    <label style="color:#888;font-size:12px;display:block;margin-top:14px">¿Quién hizo la venta?</label>
+    <select id="vender_vendedor" style="width:100%;background:#111;border:1px solid #333;color:#fff;border-radius:10px;padding:10px;margin-top:6px">
+      <option value="HALCON">🦅 Halcon Equipamientos</option>
+      <option value="DIAZ">🔧 Electromecánica Diaz</option>
+    </select>
+    <label style="color:#888;font-size:12px;display:block;margin-top:12px">Forma de pago</label>
+    <select id="vender_forma" style="width:100%;background:#111;border:1px solid #333;color:#fff;border-radius:10px;padding:10px;margin-top:6px">
+      <option value="EFECTIVO">💵 Efectivo</option><option value="TRANSFERENCIA">🏦 Transferencia</option><option value="TARJETA">💳 Tarjeta</option><option value="CUENTA_CORRIENTE">📒 Cuenta Corriente</option>
+    </select>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button onclick="document.getElementById('modalVender').style.display='none'" style="flex:1;background:#222;color:#fff;border:none;border-radius:10px;padding:10px">Cancelar</button>
+      <button onclick="confirmarVentaPresupuesto()" style="flex:1;background:#4ade80;color:#000;border:none;border-radius:10px;padding:10px;font-weight:800">Confirmar Venta</button>
+    </div>
+  </div>
+</div>
 <script>
 function sumarStock(id,cant){ if(!confirm('¿Sumar '+cant+' unidades?')) return; fetch('/api/stock/sumar/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,cantidad:cant})}).then(r=>r.json()).then(d=>{ if(d.ok) location.reload(); });}
-function venderRapido(codigo){let pago=prompt('Forma de pago:','EFECTIVO'); if(!pago) return; fetch('/api/convertir_a_venta/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo_presupuesto:codigo,forma_pago:pago.toUpperCase()})}).then(r=>r.json()).then(d=>{ if(d.ok){ alert('Venta '+d.codigo_venta+' creada'); location.reload(); } else alert('Error: '+d.error); });}
+function venderRapido(codigo){ document.getElementById('vender_codigo').value=codigo; document.getElementById('modalVenderCodigo').innerText=codigo; document.getElementById('modalVender').style.display='flex'; }
+function confirmarVentaPresupuesto(){ let codigo=document.getElementById('vender_codigo').value; let vendedor=document.getElementById('vender_vendedor').value; let pago=document.getElementById('vender_forma').value; fetch('/api/convertir_a_venta/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo_presupuesto:codigo,forma_pago:pago,vendedor:vendedor})}).then(r=>r.json()).then(d=>{ if(d.ok){ alert('Venta '+d.codigo_venta+' creada - '+(vendedor=='DIAZ'?'Electromecánica Diaz':'Halcon Equipamientos')); location.reload(); } else alert('Error: '+d.error); }); }
 function abrirModalCaja(tipo){document.getElementById('caja_tipo').value=tipo; document.getElementById('modalCaja').style.display='flex'; let t=document.getElementById('modalCajaTitulo'); let b=document.getElementById('btnGuardarCaja'); if(tipo=='EGRESO'){ t.innerHTML='➖ Nuevo Gasto'; t.style.color='#ef4444'; b.style.background='#ef4444'; b.style.color='#fff'; b.innerText='Guardar Gasto'; } else { t.innerHTML='➕ Ingreso Manual'; t.style.color='#22c55e'; b.style.background='#22c55e'; b.style.color='#000'; b.innerText='Guardar Ingreso'; } document.getElementById('caja_concepto').value=''; document.getElementById('caja_monto').value='';}
 function guardarMovimientoCaja(){let tipo=document.getElementById('caja_tipo').value; let concepto=document.getElementById('caja_concepto').value; let monto=document.getElementById('caja_monto').value; let forma=document.getElementById('caja_forma').value; if(!concepto||!monto) return alert('Completa concepto y monto'); fetch('/api/caja_movimiento/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:tipo,concepto:concepto,monto:monto,forma_pago:forma})}).then(r=>r.json()).then(d=>{ if(d.ok) location.reload(); else alert('Error: '+d.error); });}
 </script>
