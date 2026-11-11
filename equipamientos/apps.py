@@ -9,3 +9,4 @@ class EquipamientosConfig(AppConfig):
             import equipamientos.signals_seguro
         except Exception as e:
             print(f"Signals no cargados aun (normal en migracion): {e}")
+

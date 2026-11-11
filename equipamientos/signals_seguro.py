@@ -1,35 +1,42 @@
-from django.db.models.signals import pre_save, post_save, pre_delete
+from django.db.models.signals import pre_save, post_save, pre_delete, post_delete
 from django.dispatch import receiver
 from django.utils import timezone
-from .models import Producto, Venta, ItemVenta, MovimientoCaja, BitacoraDiaria
-import json
+from django.core.exceptions import PermissionDenied
+from .models import Producto, Venta, BitacoraDiaria
+import threading
+
+# Thread-local para contar borrados por request
+_thread_locals = threading.local()
+
+def get_borrados_count():
+    return getattr(_thread_locals, 'borrados_count', 0)
+
+def set_borrados_count(val):
+    _thread_locals.borrados_count = val
+
+def increment_borrados():
+    count = get_borrados_count() + 1
+    set_borrados_count(count)
+    return count
 
 @receiver(pre_save, sender=Producto)
 def producto_cambio_seguro(sender, instance, **kwargs):
-    """Antes de guardar, si cambio precio o stock, guarda en Bitacora"""
     if not instance.pk:
-        return  # es nuevo, lo maneja post_save
-    
+        return
     try:
         anterior = Producto.objects.get(pk=instance.pk)
-        cambios = []
-        
-        # Precio
         if anterior.precio != instance.precio:
-            cambios.append(f"Precio {anterior.precio} -> {instance.precio}")
             BitacoraDiaria.objects.create(
                 tipo='PRECIO',
                 codigo_producto=instance.codigo,
                 nombre_producto=instance.nombre,
-                datos_anterior={'precio': str(anterior.precio), 'stock': str(getattr(anterior, 'stock', ''))},
-                datos_nuevo={'precio': str(instance.precio), 'stock': str(getattr(instance, 'stock', ''))},
+                datos_anterior={'precio': str(anterior.precio)},
+                datos_nuevo={'precio': str(instance.precio)},
                 descripcion=f"Precio {anterior.precio} -> {instance.precio}",
                 usuario=getattr(instance, 'modificado_por', 'sistema')
             )
-        
-        # Stock
-        stock_ant = getattr(anterior, 'stock', getattr(anterior, 'cantidad', None))
-        stock_nue = getattr(instance, 'stock', getattr(instance, 'cantidad', None))
+        stock_ant = getattr(anterior, 'stock', None)
+        stock_nue = getattr(instance, 'stock', None)
         if stock_ant != stock_nue:
             BitacoraDiaria.objects.create(
                 tipo='STOCK',
@@ -40,10 +47,8 @@ def producto_cambio_seguro(sender, instance, **kwargs):
                 descripcion=f"Stock {stock_ant} -> {stock_nue}",
                 usuario=getattr(instance, 'modificado_por', 'sistema')
             )
-    except Producto.DoesNotExist:
+    except:
         pass
-    except Exception as e:
-        print(f"Error signal producto: {e}")
 
 @receiver(post_save, sender=Producto)
 def producto_nuevo_seguro(sender, instance, created, **kwargs):
@@ -53,24 +58,44 @@ def producto_nuevo_seguro(sender, instance, created, **kwargs):
                 tipo='PRODUCTO_NUEVO',
                 codigo_producto=instance.codigo,
                 nombre_producto=instance.nombre,
-                datos_nuevo={'precio': str(instance.precio), 'stock': str(getattr(instance, 'stock', ''))},
+                datos_nuevo={'precio': str(instance.precio)},
                 descripcion=f"Nuevo producto {instance.codigo}",
             )
-        except Exception as e:
-            print(f"Error signal nuevo: {e}")
+        except:
+            pass
+    # Resetear contador después de crear (nuevo request)
+    set_borrados_count(0)
 
 @receiver(pre_delete, sender=Producto)
 def producto_borrado_seguro(sender, instance, **kwargs):
+    # BLOQUEO AUTOMÁTICO DE BORRADOS MASIVOS
+    count = increment_borrados()
+    
+    # Si intentan borrar más de 10 productos en la misma operación, BLOQUEAR
+    if count > 10:
+        try:
+            BitacoraDiaria.objects.create(
+                tipo='PRODUCTO_BORRADO',
+                codigo_producto='BLOQUEO_MASIVO',
+                nombre_producto=f'INTENTO BORRADO MASIVO BLOQUEADO: {count} productos',
+                descripcion=f'BLOQUEO AUTOMÁTICO: Intento de borrar {count} productos bloqueado',
+            )
+        except:
+            pass
+        # Resetear para próximo intento
+        set_borrados_count(0)
+        raise PermissionDenied(f"BLOQUEO AUTOMÁTICO: Intento de borrar {count} productos bloqueado. Si realmente querés borrar masivo, borrá de a 10 por vez máximo.")
+    
     try:
         BitacoraDiaria.objects.create(
             tipo='PRODUCTO_BORRADO',
             codigo_producto=instance.codigo,
             nombre_producto=instance.nombre,
-            datos_anterior={'precio': str(instance.precio), 'stock': str(getattr(instance, 'stock', ''))},
+            datos_anterior={'precio': str(instance.precio)},
             descripcion=f"Borrado {instance.codigo}",
         )
-    except Exception as e:
-        print(f"Error signal borrado: {e}")
+    except:
+        pass
 
 @receiver(post_save, sender=Venta)
 def venta_segura(sender, instance, created, **kwargs):
@@ -81,9 +106,5 @@ def venta_segura(sender, instance, created, **kwargs):
                 datos_nuevo={'venta_id': instance.id, 'total': str(getattr(instance, 'total', ''))},
                 descripcion=f"Venta #{instance.id} - ${getattr(instance, 'total', '')}",
             )
-        except Exception as e:
-            print(f"Error signal venta: {e}")
-
-# IMPORTANTE: En equipamientos/apps.py agregar:
-# def ready(self):
-#     import equipamientos.signals_seguro
+        except:
+            pass
