@@ -418,7 +418,9 @@ def api_convertir_a_venta(request):
             if hasattr(pres, 'venta') and pres.venta is not None:
                 return JsonResponse({'ok': False, 'error': 'Este presupuesto ya es una venta'})
             codigo_venta = f"VEN-{uuid.uuid4().hex[:4].upper()}"
-            venta = Venta.objects.create(codigo=codigo_venta, presupuesto=pres, cliente=pres.cliente, vehiculo=pres.vehiculo, colocacion=pres.colocacion, total=pres.total, forma_pago=forma_pago, vendedor=vendedor)
+            _tiene_vendedor = any(f.name == 'vendedor' for f in Venta._meta.get_fields())
+            _kwargs_v = {'vendedor': vendedor} if _tiene_vendedor else {}
+            venta = Venta.objects.create(codigo=codigo_venta, presupuesto=pres, cliente=pres.cliente, vehiculo=pres.vehiculo, colocacion=pres.colocacion, total=pres.total, forma_pago=forma_pago, **_kwargs_v)
             for item in pres.items.all():
                 prod = item.producto
                 ItemVenta.objects.create(venta=venta, producto=prod, cantidad=item.cantidad, precio=float(item.precio or item.precio_unitario or prod.precio))
@@ -462,6 +464,8 @@ def api_venta_directa(request):
             vendedor = 'DIAZ'
         else:
             vendedor = 'HALCON'
+        _tiene_vendedor = any(f.name == 'vendedor' for f in Venta._meta.get_fields())
+        _kwargs_v = {'vendedor': vendedor} if _tiene_vendedor else {}
         venta = Venta.objects.create(
             codigo=codigo, 
             cliente=cliente, 
@@ -473,9 +477,9 @@ def api_venta_directa(request):
             descuento_porcentaje=descuento_porcentaje,
             descuento_monto=descuento_monto,
             forma_pago=forma_pago,
-            vendedor=vendedor,
             es_directa=True, 
-            stock_descontado=True
+            stock_descontado=True,
+            **_kwargs_v
         )
         for it in data.get('items',[]):
             if it.get('es_manual'):
