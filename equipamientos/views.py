@@ -21,7 +21,7 @@ DATOS_EMPRESA = {
     "seña": "10%",
     "alias": "halconequipamientos",
     "condiciones": "Se reserva con seña del 10%. Validez 15 días.",
-    "footer": "¡Gracias por confiar en HALCÓN EQUIPAMIENTOS!"
+    "footer": "¡Gracias por confiar en 【entity-HALCÓN¦canonical_name=HALCÓN】 EQUIPAMIENTOS!"
 }
 
 def _log_accion(request, accion):
@@ -38,7 +38,9 @@ def dashboard(request):
     hace_30 = hoy - timedelta(days=30)
     ventas_qs = Venta.objects.select_related('cliente').order_by('-fecha_venta')
     ventas_recientes = ventas_qs[:15]
-    presupuestos = Presupuesto.objects.select_related('cliente').order_by('-creado')[:10]
+    # FIX 11/11: En Inicio solo mostrar presupuestos PENDIENTES de vender.
+    # Cuando se vende, desaparece de aca pero queda en Presupuestos con ✅ VEN-XXXX
+    presupuestos = Presupuesto.objects.select_related('cliente').exclude(id__in=Venta.objects.filter(presupuesto__isnull=False).values_list('presupuesto_id', flat=True)).order_by('-creado')[:10]
     # FIX 09/11: Presupuesto NUNCA cuenta como venta ni como caja.
     # Solo Venta suma a total_acum / total_mes / count. Si no hay ventas, queda en 0.
     total_acum = ventas_qs.aggregate(Sum('total'))['total__sum'] or 0
@@ -407,7 +409,7 @@ def api_convertir_a_venta(request):
         forma_pago = data.get('forma_pago','EFECTIVO')
         # VENDEDOR - si no viene, default HALCON
         vendedor_raw = str(data.get('vendedor','HALCON') or 'HALCON').strip().upper()
-        if vendedor_raw in ['HALCON EQUIPAMIENTOS', 'HALCON', 'HALCÓN', 'HALCÓN EQUIPAMIENTOS']:
+        if vendedor_raw in ['【entity-HALCON EQUIPAMIENTOS¦canonical_name=HALCÓN】', 'HALCON', '【entity-HALCÓN¦canonical_name=HALCÓN】', '【entity-HALCÓN¦canonical_name=HALCÓN】 EQUIPAMIENTOS']:
             vendedor = 'HALCON'
         elif vendedor_raw in ['ELECTROMECÁNICA DIAZ', 'ELECTROMECANICA DIAZ', 'DIAZ', 'ELECTROMECANICA']:
             vendedor = 'DIAZ'
@@ -458,7 +460,7 @@ def api_venta_directa(request):
         total_final = float(data.get('total',0) or 0)
         forma_pago = data.get('forma_pago','EFECTIVO')
         vendedor_raw = str(data.get('vendedor','HALCON') or 'HALCON').strip().upper()
-        if vendedor_raw in ['HALCON EQUIPAMIENTOS', 'HALCON', 'HALCÓN', 'HALCÓN EQUIPAMIENTOS']:
+        if vendedor_raw in ['【entity-HALCON EQUIPAMIENTOS¦canonical_name=HALCÓN】', 'HALCON', '【entity-HALCÓN¦canonical_name=HALCÓN】', '【entity-HALCÓN¦canonical_name=HALCÓN】 EQUIPAMIENTOS']:
             vendedor = 'HALCON'
         elif vendedor_raw in ['ELECTROMECÁNICA DIAZ', 'ELECTROMECANICA DIAZ', 'DIAZ', 'ELECTROMECANICA']:
             vendedor = 'DIAZ'
@@ -776,15 +778,12 @@ def api_sincronizar_categorias(request):
         import traceback; traceback.print_exc()
         return JsonResponse({'ok': False, 'error': str(e)})
 
-# BLINDADO + BACKUP AUTOMÁTICO: Importar Excel SOLO crea/actualiza ItemListaPrecio, NO pisa Producto.precio ni nombre si ya existe
-# + HACE BACKUP AUTOMÁTICO ANTES DE IMPORTAR - No tenés que entrar nunca a hacer nada
 @login_required
 @csrf_exempt
 def api_importar_lista_excel(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
     try:
-        # === BACKUP AUTOMÁTICO ANTES DE IMPORTAR - 100% AUTOMÁTICO ===
         try:
             from django.core import management
             from .models import BackupAutomatico
@@ -796,17 +795,13 @@ def api_importar_lista_excel(request):
                 print("✅ Backup automático antes de importar Excel creado")
         except Exception as e:
             print(f"⚠ Backup automático falló pero seguimos con import: {e}")
-
-        # === PROTECCIÓN: Validar que el Excel no esté vacío ===
         if request.content_type == 'application/json':
             data = json.loads(request.body)
             items = data.get('items', [])
             lista_id = data.get('lista_id')
             nombre_nueva = data.get('nombre_nueva','').strip()
-            
             if len(items) == 0:
                 return JsonResponse({'ok': False, 'error': 'El Excel está vacío - 0 productos. Importación bloqueada para proteger tus datos. Verificá el archivo.'})
-            
             if lista_id != 'nueva':
                 try:
                     lista_existente = ListaPrecio.objects.get(id=lista_id)
@@ -814,7 +809,6 @@ def api_importar_lista_excel(request):
                         return JsonResponse({'ok': False, 'error': f'El Excel tiene solo {len(items)} productos pero la lista {lista_existente.nombre} tiene {lista_existente.items.count()} productos. ¿Estás seguro? Si sí, importá de nuevo con más de 5 productos o vaciá la lista primero manualmente.'})
                 except:
                     pass
-            
             if lista_id == 'nueva':
                 if not nombre_nueva:
                     return JsonResponse({'ok': False, 'error': 'Falta nombre de lista'})
@@ -842,18 +836,15 @@ def api_importar_lista_excel(request):
                 ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
             _log_accion(request, f"Importo {len(items)} a lista {lista.nombre}: creados {creados} actualizados {actualizados} - BACKUP AUTOMÁTICO + BLINDADO")
             return JsonResponse({'ok': True, 'lista_nombre': lista.nombre, 'creados': creados, 'actualizados': actualizados, 'total_lista': lista.items.count(), 'categoria_usada': nombre_base})
-        
         import openpyxl
         lista_id = request.POST.get('lista_id')
         archivo = request.FILES.get('archivo')
         if not lista_id or not archivo:
             return JsonResponse({'ok': False, 'error': 'Falta lista o archivo'})
-        
         lista = ListaPrecio.objects.get(id=lista_id)
         nombre_base = lista.nombre.split(' - ')[0].strip().upper() or 'OTRO'
         wb = openpyxl.load_workbook(archivo)
         ws = wb.active
-        
         filas_validas = 0
         for row in ws.iter_rows(min_row=2, values_only=True):
             if row and row[0] and row[2]:
@@ -863,13 +854,10 @@ def api_importar_lista_excel(request):
                         filas_validas += 1
                 except:
                     pass
-        
         if filas_validas == 0:
             return JsonResponse({'ok': False, 'error': 'El Excel está vacío o no tiene precios válidos - 0 productos. Importación bloqueada para proteger tus datos.'})
-        
         if lista.items.count() > 50 and filas_validas < 5:
             return JsonResponse({'ok': False, 'error': f'El Excel tiene solo {filas_validas} productos pero la lista {lista.nombre} tiene {lista.items.count()} productos. Importación bloqueada por seguridad.'})
-        
         count = 0
         for row in ws.iter_rows(min_row=2, values_only=True):
             if not row or not row[0]: continue
@@ -885,7 +873,6 @@ def api_importar_lista_excel(request):
                     prod.save()
             ItemListaPrecio.objects.update_or_create(lista=lista, producto=prod, defaults={'precio': precio})
             count += 1
-        
         _log_accion(request, f"Importo Excel a {lista.nombre}: {count} - BACKUP AUTOMÁTICO + BLINDADO")
         return JsonResponse({'ok': True, 'importados': count, 'categoria_usada': nombre_base})
     except Exception as e:
