@@ -21,7 +21,7 @@ DATOS_EMPRESA = {
     "seña": "10%",
     "alias": "halconequipamientos",
     "condiciones": "Se reserva con seña del 10%. Validez 15 días.",
-    "footer": "¡Gracias por confiar en 【entity-HALCÓN¦canonical_name=HALCÓN】 EQUIPAMIENTOS!"
+    "footer": "¡Gracias por confiar en HALCÓN EQUIPAMIENTOS!"
 }
 
 def _log_accion(request, accion):
@@ -409,20 +409,48 @@ def api_convertir_a_venta(request):
         forma_pago = data.get('forma_pago','EFECTIVO')
         # VENDEDOR - si no viene, default HALCON
         vendedor_raw = str(data.get('vendedor','HALCON') or 'HALCON').strip().upper()
-        if vendedor_raw in ['【entity-HALCON EQUIPAMIENTOS¦canonical_name=HALCÓN】', 'HALCON', '【entity-HALCÓN¦canonical_name=HALCÓN】', '【entity-HALCÓN¦canonical_name=HALCÓN】 EQUIPAMIENTOS']:
+        if vendedor_raw in ['HALCON EQUIPAMIENTOS', 'HALCON', 'HALCÓN', 'HALCÓN EQUIPAMIENTOS']:
             vendedor = 'HALCON'
         elif vendedor_raw in ['ELECTROMECÁNICA DIAZ', 'ELECTROMECANICA DIAZ', 'DIAZ', 'ELECTROMECANICA']:
             vendedor = 'DIAZ'
         else:
             vendedor = 'HALCON'
+        # DESCUENTO - solo % y solo sobre productos, colocacion NO se toca
+        try:
+            descuento_pct = float(data.get('descuento_porcentaje', 0) or 0)
+        except:
+            descuento_pct = 0
+        if descuento_pct < 0:
+            descuento_pct = 0
+        if descuento_pct > 100:
+            descuento_pct = 100
         try:
             pres = Presupuesto.objects.select_related('cliente').prefetch_related('items__producto').get(codigo=codigo_pres)
             if hasattr(pres, 'venta') and pres.venta is not None:
                 return JsonResponse({'ok': False, 'error': 'Este presupuesto ya es una venta'})
             codigo_venta = f"VEN-{uuid.uuid4().hex[:4].upper()}"
+            # Calculo: (subtotal_productos - descuento) + colocacion
+            subtotal_prod = float(pres.subtotal or 0)
+            coloc = float(pres.colocacion or 0)
+            total_orig = float(pres.total or 0)
+            # Si subtotal viene en 0 (presupuestos viejos), lo sacamos de total - colocacion
+            if subtotal_prod <= 0 and total_orig > 0:
+                subtotal_prod = total_orig - coloc
+            descuento_monto = round(subtotal_prod * (descuento_pct / 100), 2)
+            total_final = round((subtotal_prod - descuento_monto) + coloc, 2)
             _tiene_vendedor = any(f.name == 'vendedor' for f in Venta._meta.get_fields())
             _kwargs_v = {'vendedor': vendedor} if _tiene_vendedor else {}
-            venta = Venta.objects.create(codigo=codigo_venta, presupuesto=pres, cliente=pres.cliente, vehiculo=pres.vehiculo, colocacion=pres.colocacion, total=pres.total, forma_pago=forma_pago, **_kwargs_v)
+            # Campos de descuento si existen en el modelo (venta directa ya los usa)
+            _nombres_venta = [f.name for f in Venta._meta.get_fields()]
+            if 'total_original' in _nombres_venta:
+                _kwargs_v['total_original'] = total_orig
+            if 'subtotal_productos' in _nombres_venta:
+                _kwargs_v['subtotal_productos'] = subtotal_prod
+            if 'descuento_porcentaje' in _nombres_venta:
+                _kwargs_v['descuento_porcentaje'] = descuento_pct
+            if 'descuento_monto' in _nombres_venta:
+                _kwargs_v['descuento_monto'] = descuento_monto
+            venta = Venta.objects.create(codigo=codigo_venta, presupuesto=pres, cliente=pres.cliente, vehiculo=pres.vehiculo, colocacion=pres.colocacion, total=total_final, forma_pago=forma_pago, **_kwargs_v)
             for item in pres.items.all():
                 prod = item.producto
                 ItemVenta.objects.create(venta=venta, producto=prod, cantidad=item.cantidad, precio=float(item.precio or item.precio_unitario or prod.precio))
@@ -430,9 +458,9 @@ def api_convertir_a_venta(request):
                 prod.save()
             venta.stock_descontado = True
             venta.save()
-            MovimientoCaja.objects.create(tipo='INGRESO', concepto=f"Venta {codigo_venta} - {pres.cliente.nombre}", monto=venta.total, forma_pago=forma_pago, venta=venta)
-            _log_accion(request, f"Convirtio presupuesto {pres.codigo} a venta {codigo_venta} total {venta.total} vendedor {vendedor}")
-            return JsonResponse({'ok': True, 'codigo_venta': codigo_venta})
+            MovimientoCaja.objects.create(tipo='INGRESO', concepto=f"Venta {codigo_venta} - {pres.cliente.nombre}" + (f" - Desc {descuento_pct}% (-${descuento_monto:,.0f})" if descuento_pct > 0 else ""), monto=venta.total, forma_pago=forma_pago, venta=venta)
+            _log_accion(request, f"Convirtio presupuesto {pres.codigo} a venta {codigo_venta} total orig {total_orig} desc {descuento_pct}% (-{descuento_monto}) final {venta.total} vendedor {vendedor}")
+            return JsonResponse({'ok': True, 'codigo_venta': codigo_venta, 'total_final': total_final, 'descuento_porcentaje': descuento_pct, 'descuento_monto': descuento_monto})
         except Presupuesto.DoesNotExist:
             return JsonResponse({'ok': False, 'error': 'Presupuesto no encontrado'})
         except Exception as e:
@@ -460,7 +488,7 @@ def api_venta_directa(request):
         total_final = float(data.get('total',0) or 0)
         forma_pago = data.get('forma_pago','EFECTIVO')
         vendedor_raw = str(data.get('vendedor','HALCON') or 'HALCON').strip().upper()
-        if vendedor_raw in ['【entity-HALCON EQUIPAMIENTOS¦canonical_name=HALCÓN】', 'HALCON', '【entity-HALCÓN¦canonical_name=HALCÓN】', '【entity-HALCÓN¦canonical_name=HALCÓN】 EQUIPAMIENTOS']:
+        if vendedor_raw in ['HALCON EQUIPAMIENTOS', 'HALCON', 'HALCÓN', 'HALCÓN EQUIPAMIENTOS']:
             vendedor = 'HALCON'
         elif vendedor_raw in ['ELECTROMECÁNICA DIAZ', 'ELECTROMECANICA DIAZ', 'DIAZ', 'ELECTROMECANICA']:
             vendedor = 'DIAZ'
