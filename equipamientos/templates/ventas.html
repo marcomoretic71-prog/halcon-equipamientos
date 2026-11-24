@@ -111,7 +111,7 @@ body{background:#0f0f0f;color:#e0e0e0;font-family:Inter,system-ui}.navbar{backgr
   data-total-original="{{v.total_original|default:''}}"
   data-colocacion="{{v.colocacion|default:'0'}}"
   data-total="{{v.total}}">
-  {% for it in v.itemventa_set.all %}
+  {% for it in v.items.all %}
   <div class="item-detalle"
     data-codigo="{% if it.producto %}{{it.producto.codigo}}{% else %}MANUAL{% endif %}"
     data-nombre="{% if it.es_manual or not it.producto %}{{it.nombre_manual}}{% else %}{{it.producto.nombre}}{% endif %}"
@@ -229,6 +229,7 @@ body{background:#0f0f0f;color:#e0e0e0;font-family:Inter,system-ui}.navbar{backgr
 <script>
 function fmtARS(n){ n = parseFloat(n)||0; return '$ ' + n.toLocaleString('es-AR',{minimumFractionDigits:2}); }
 function verDetalleVenta(id){
+  try{
   let box = document.getElementById('datos-venta-'+id);
   if(!box){ alert('No se encontró el detalle de esta venta'); return; }
   let pct = parseFloat(box.dataset.descuentoPct)||0;
@@ -245,7 +246,6 @@ function verDetalleVenta(id){
   document.getElementById('det_vendedor').textContent = box.dataset.vendedor || '—';
   let veh = (box.dataset.vehiculo||'').trim();
   document.getElementById('det_vehiculo').textContent = veh ? ('Vehículo: ' + veh) : '';
-  // Items
   let itemsBox = document.getElementById('det_items');
   if(items.length===0){
     itemsBox.innerHTML = '<div style="color:#888;font-size:13px;padding:10px 0">Esta venta no tiene productos guardados en el detalle (venta vieja). El total es el que figura abajo.</div>';
@@ -261,10 +261,8 @@ function verDetalleVenta(id){
       html += '<div class="detalle-row d-flex justify-content-between align-items-start"><div><b style="font-family:monospace;color:#FFD600;font-size:11px">' + el.dataset.codigo + '</b>' + badge + '<div style="color:#fff;font-size:13px">' + el.dataset.nombre + '</div><small style="color:#888">' + fmtARS(precio) + ' x ' + cant + '</small></div><b style="color:#fff;white-space:nowrap;margin-left:10px">' + fmtARS(sub) + '</b></div>';
     });
     itemsBox.innerHTML = html;
-    // Si la venta no tiene subtotal guardado (ventas viejas), lo sacamos de la suma de items
     if(!subtotal || subtotal<=0) subtotal = sumaItems;
   }
-  // Si hay descuento pero no monto, lo calculamos
   if(pct>0 && (!montoDesc || montoDesc<=0)) montoDesc = subtotal * (pct/100);
   if(!totalOrig || totalOrig<=0) totalOrig = subtotal + coloc;
   document.getElementById('det_subtotal').textContent = fmtARS(subtotal);
@@ -286,6 +284,7 @@ function verDetalleVenta(id){
   }
   document.getElementById('det_total').textContent = fmtARS(total);
   document.getElementById('modalDetalleVenta').style.display = 'flex';
+  }catch(e){ alert('Error abriendo detalle: '+e.message); console.log(e); }
 }
 function cerrarDetalleVenta(){ document.getElementById('modalDetalleVenta').style.display='none'; }
 document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ cerrarDetalleVenta(); } });
@@ -351,4 +350,113 @@ function buscarProdDirecta(q){
   });
 }
 function agregarProdDirecta(prod){
-  let ex=carritoDirect
+  let ex=carritoDirecta.find(x=>x.id==prod.id && !x.es_manual);
+  if(ex){ ex.cantidad++; } else{ carritoDirecta.push({id:prod.id,codigo:prod.codigo,nombre:prod.nombre,precio:prod.precio,cantidad:1,es_manual:false}); }
+  document.getElementById('vd_resultados').style.display='none';
+  document.getElementById('vd_buscar').value='';
+  renderCarritoDirecta();
+}
+function agregarManualDirecta(){
+  let nombre = document.getElementById('vd_manual_nombre').value.trim();
+  let precio = parseFloat(document.getElementById('vd_manual_precio').value) || 0;
+  if(!nombre){ alert('Poné nombre del producto manual'); return; }
+  if(precio<=0){ alert('Poné precio válido'); return; }
+  let idManual = 'MANUAL-' + Date.now();
+  carritoDirecta.push({id:idManual,codigo:'MANUAL',nombre:nombre,precio:precio,cantidad:1,es_manual:true,nombre_manual:nombre});
+  document.getElementById('vd_manual_nombre').value='';
+  document.getElementById('vd_manual_precio').value='';
+  renderCarritoDirecta();
+}
+function renderCarritoDirecta(){
+  let box=document.getElementById('vd_carrito');
+  let subtotalProductos = 0;
+  let html = '';
+  if(carritoDirecta.length==0){
+    box.innerHTML='<small class="text-secondary">Carrito vacío</small>';
+  } else {
+    carritoDirecta.forEach((it, idx)=>{
+      let sub=it.precio*it.cantidad; subtotalProductos+=sub;
+      let badge = it.es_manual ? '<span style="background:#FFD600;color:#000;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:800">MANUAL</span>' : '';
+      html+=`<div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid #222"><div>${badge} <b style="font-size:11px;font-family:monospace;color:#FFD600">${it.codigo}</b> <span style="font-size:12px">${it.nombre.substring(0,35)}</span><br><small style="color:#888">$${it.precio} x ${it.cantidad} = $${sub.toFixed(0)}</small></div><div class="d-flex gap-1"><button onclick="cambiarCantDirecta(${idx},-1)" style="width:26px;height:26px;border-radius:50%;background:#222;color:#fff;border:1px solid #333">-</button><span style="font-weight:700;margin:0 4px">${it.cantidad}</span><button onclick="cambiarCantDirecta(${idx},1)" style="width:26px;height:26px;border-radius:50%;background:#FFD600;color:#000;border:none;font-weight:800">+</button><button onclick="quitarDirecta(${idx})" style="background:transparent;color:#ef4444;border:none;margin-left:6px">✕</button></div></div>`;
+    });
+    box.innerHTML=html;
+  }
+  let coloc = parseFloat(document.getElementById('vd_colocacion').value) || 0;
+  let descPct = parseFloat(document.getElementById('vd_descuento').value) || 0;
+  if(descPct<0) descPct=0; if(descPct>100) descPct=100;
+  let descMonto = subtotalProductos * (descPct/100);
+  let subtotalConDesc = subtotalProductos - descMonto;
+  let totalOriginal = subtotalProductos + coloc;
+  totalDirecta = subtotalConDesc + coloc;
+  document.getElementById('vd_subtotal').innerText = '$ ' + subtotalProductos.toLocaleString('es-AR',{minimumFractionDigits:0});
+  document.getElementById('vd_descuento_info').innerText = descPct>0 ? `-${descPct}% = -$${descMonto.toLocaleString('es-AR',{minimumFractionDigits:0})}` : '';
+  document.getElementById('vd_total_original').innerText = '$ ' + totalOriginal.toLocaleString('es-AR',{minimumFractionDigits:2});
+  document.getElementById('vd_total').innerText = '$ ' + totalDirecta.toLocaleString('es-AR',{minimumFractionDigits:2}) + (descPct>0 ? ' (con descuento)' : '');
+  window._vd_calc = {subtotal_productos: subtotalProductos, descuento_porcentaje: descPct, descuento_monto: descMonto, total_original: totalOriginal, total_final: totalDirecta};
+}
+function cambiarCantDirecta(idx, delta){ carritoDirecta[idx].cantidad+=delta; if(carritoDirecta[idx].cantidad<=0) carritoDirecta.splice(idx,1); renderCarritoDirecta(); }
+function quitarDirecta(idx){ carritoDirecta.splice(idx,1); renderCarritoDirecta(); }
+function guardarVentaDirecta(){
+  let cliente=document.getElementById('vd_cliente').value.trim();
+  if(!cliente){ alert('Poné nombre del cliente'); return; }
+  if(carritoDirecta.length==0){ alert('Agregá al menos un producto'); return; }
+  let coloc = parseFloat(document.getElementById('vd_colocacion').value) || 0;
+  let calc = window._vd_calc || {subtotal_productos:0,descuento_porcentaje:0,descuento_monto:0,total_original:totalDirecta,total_final:totalDirecta};
+  let data={
+    cliente_nombre:cliente,
+    telefono:document.getElementById('vd_telefono').value.trim(),
+    vehiculo:document.getElementById('vd_vehiculo').value.trim(),
+    forma_pago:document.getElementById('vd_pago').value,
+    vendedor:document.getElementById('vd_vendedor').value,
+    colocacion: coloc,
+    subtotal_productos: calc.subtotal_productos,
+    descuento_porcentaje: calc.descuento_porcentaje,
+    descuento_monto: calc.descuento_monto,
+    total_original: calc.total_original,
+    total:calc.total_final,
+    items:carritoDirecta.map(i=>({id:i.id,codigo:i.codigo,nombre:i.nombre,cantidad:i.cantidad,precio:i.precio,es_manual:!!i.es_manual,nombre_manual:i.nombre_manual||i.nombre}))
+  };
+  if(!confirm('¿Confirmar venta por $'+calc.total_final.toLocaleString('es-AR')+' a '+cliente+'? (Productos $'+calc.subtotal_productos+' - '+calc.descuento_porcentaje+'% = $'+calc.descuento_monto+' + $'+coloc+' instalación)')) return;
+  fetch('/api/venta_directa/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r=>r.json()).then(d=>{ if(d.ok){ alert('✅ Venta '+d.codigo+' creada.'); location.reload(); } else alert('Error: '+d.error); });
+}
+document.getElementById('vd_barcode').addEventListener('keydown', function(e){
+  if(e.key==='Enter'){
+    e.preventDefault();
+    venderPorBarcode(this.value);
+  }
+});
+document.getElementById('vd_barcode').addEventListener('change', function(){
+  if(this.value.trim().length>2) venderPorBarcode(this.value);
+});
+function getCSRFToken(){
+  let m = document.cookie.match(/csrftoken=([^;]+)/);
+  if(m) return m[1];
+  let inp = document.querySelector('[name=csrfmiddlewaretoken]');
+  return inp ? inp.value : '';
+}
+function eliminarVenta(id, codigo, total){
+  if(!confirm(`¿Borrar venta ${codigo} por ${total}?
+✅ Se devuelve el stock (solo productos reales, manuales no)
+✅ Se borra el ingreso de caja
+✅ Se borra la venta
+¿Estás seguro?`)) return;
+  if(!confirm(`CONFIRMACIÓN FINAL: ¿Borrar DEFINITIVAMENTE ${codigo}?
+Esta acción no se puede deshacer.`)) return;
+  fetch('/api/eliminar_venta/', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken': getCSRFToken()},
+    body: JSON.stringify({venta_id: id})
+  })
+  .then(r=>r.json())
+  .then(d=>{
+    if(d.ok){
+      alert(`✅ ${d.mensaje}`);
+      location.reload();
+    } else {
+      alert('❌ Error: '+(d.error||'No se pudo borrar'));
+    }
+  })
+  .catch(err=>alert('Error de red: '+err));
+}
+</script>
+</body></html>
