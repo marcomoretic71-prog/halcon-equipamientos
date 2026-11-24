@@ -32,6 +32,7 @@ urlpatterns = [
     path('caja/', views.caja_view, name='caja'),
     path('api/caja_eliminar/', views.api_caja_eliminar, name='api_caja_eliminar'),
     path('api/eliminar_venta/', views.api_eliminar_venta, name='api_eliminar_venta'),
+    path('api/eliminar_presupuesto/', views.api_eliminar_presupuesto, name='api_eliminar_presupuesto'),
     path('api/crear_lista/', views.api_crear_lista, name='api_crear_lista'),
     path('api/importar_lista_excel/', views.api_importar_lista_excel, name='api_importar_lista_excel'),
     path('api/exportar_lista_excel/', views.api_exportar_lista_excel, name='api_exportar_lista_excel'),
@@ -45,7 +46,7 @@ urlpatterns = [
     path('login/', views_super.login_view, name='login'),
     path('logout/', views_super.logout_view, name='logout'),
     path('super-admin/', views_super.super_admin_dashboard, name='super_admin'),
-    path('api/super/bloquear/', views_super.api_bloquear_empresa, name='api_bloquear'),
+    path('api/super/bloquear/', views_super.api_bloquear_empresa, name='api_bloquear_empresa'),
     path('api/super/bloqueo-global/', views_super.api_bloqueo_global, name='api_bloqueo_global'),
     path('api/cambiar-password/', views.api_cambiar_password, name='cambiar_password'),
 ]

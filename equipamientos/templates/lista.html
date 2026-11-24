@@ -89,7 +89,7 @@ body{background:#0a0a0a;color:#e5e5e5;font-family:Inter,system-ui}
             <td class="p-2 text-right font-bold text-[#facc15]">${{ p.total|floatformat:0 }}</td>
             <td class="p-2 text-center">{% if p.venta %}<span class="bg-[#22c55e]/20 text-[#4ade80] px-2 py-1 rounded-full text- font-bold">✅ {{ p.venta.codigo }}</span>{% else %}<span class="bg-[#222] text-zinc-400 px-2 py-1 rounded-full text-">Pendiente</span>{% endif %}</td>
             <td class="p-2 text-right"><a href="/pdf/{{ p.codigo }}/" class="bg-white text-black px-3 py-1 rounded-full text- font-bold">PDF</a></td>
-            <td class="p-2 text-center">{% if not p.venta %}<button onclick="venderPresupuesto('{{ p.codigo }}')" class="bg-[#22c55e] text-black px-3 py-1 rounded-full text- font-bold">💰 Vender</button>{% else %}<span class="text- text-[#4ade80]">{{ p.venta.forma_pago }}</span>{% endif %}</td>
+            <td class="p-2 text-center whitespace-nowrap">{% if not p.venta %}<button onclick="venderPresupuesto('{{ p.codigo }}')" class="bg-[#22c55e] text-black px-3 py-1 rounded-full text- font-bold">💰 Vender</button> <button onclick="eliminarPresupuesto('{{ p.codigo }}', '{{ p.cliente.nombre|escapejs }}')" class="bg-red-600 text-white px-3 py-1 rounded-full text- font-bold">🗑️ Borrar</button>{% else %}<span class="text- text-[#4ade80]">{{ p.venta.forma_pago }}</span>{% endif %}</td>
           </tr>
           {% empty %}
           <tr><td colspan="8" class="p-8 text-center text-zinc-500">Aún no hay presupuestos.</td></tr>
@@ -202,6 +202,26 @@ function confirmarVentaPresupuestoLista(){
   let vendedor = document.getElementById('vender_pres_vendedor').value;
   let pago = document.getElementById('vender_pres_forma').value;
   fetch('/api/convertir_a_venta/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo_presupuesto:codigo,forma_pago:pago,vendedor:vendedor})}).then(r=>r.json()).then(d=>{ if(d.ok){ alert('Venta '+d.codigo_venta+' creada - '+(vendedor=='DIAZ'?'Electromecánica Diaz':'Halcon Equipamientos')); location.reload(); } else alert('Error: '+d.error); });
+}
+async function eliminarPresupuesto(codigo, cliente){
+  if(!confirm('¿Borrar el presupuesto ' + codigo + ' de ' + cliente + ' para siempre?')){
+    return;
+  }
+  if(!confirm('Seguro seguro? Esto NO se puede deshacer. Se borra ' + codigo + ' y sus productos.')){
+    return;
+  }
+  try{
+    let res = await fetch('/api/eliminar_presupuesto/', {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'}, body: JSON.stringify({codigo: codigo})});
+    let data = await res.json();
+    if(data.ok){
+      alert('Presupuesto ' + codigo + ' borrado para siempre.');
+      location.reload();
+    } else {
+      alert('No se pudo borrar: ' + (data.error || 'Error'));
+    }
+  } catch(e){
+    alert('Error de conexión al borrar ' + codigo);
+  }
 }
 renderCarrito();
 </script>

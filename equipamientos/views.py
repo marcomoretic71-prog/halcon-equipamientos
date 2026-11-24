@@ -1048,6 +1048,39 @@ def api_eliminar_venta(request):
 
 @login_required
 @csrf_exempt
+def api_eliminar_presupuesto(request):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
+    try:
+        data = json.loads(request.body)
+        codigo = str(data.get('codigo') or data.get('codigo_presupuesto') or '').strip().upper()
+        if not codigo:
+            return JsonResponse({'ok': False, 'error': 'Falta codigo de presupuesto'})
+        try:
+            pres = Presupuesto.objects.select_related('cliente').get(codigo=codigo)
+        except Presupuesto.DoesNotExist:
+            return JsonResponse({'ok': False, 'error': f'Presupuesto {codigo} no existe'})
+        # PROTECCION: si ya es venta, NO borrar. Si se borra el presupuesto se rompe la venta.
+        if Venta.objects.filter(presupuesto=pres).exists():
+            venta = Venta.objects.filter(presupuesto=pres).first()
+            return JsonResponse({'ok': False, 'error': f'No se puede borrar {codigo} porque ya es la venta {venta.codigo}. Borra primero la venta si queres borrarlo.'})
+        if hasattr(pres, 'venta') and pres.venta is not None:
+            return JsonResponse({'ok': False, 'error': f'No se puede borrar {codigo} porque ya es la venta {pres.venta.codigo}.'})
+        with transaction.atomic():
+            cliente_nombre = pres.cliente.nombre if pres.cliente else ''
+            total_borrado = float(pres.total or 0)
+            cant_items = ItemPresupuesto.objects.filter(presupuesto=pres).count()
+            # Borrar items primero y despues el presupuesto
+            ItemPresupuesto.objects.filter(presupuesto=pres).delete()
+            pres.delete()
+            _log_accion(request, f"Elimino presupuesto {codigo} cliente {cliente_nombre} total {total_borrado} items {cant_items}")
+        return JsonResponse({'ok': True, 'codigo': codigo, 'cliente': cliente_nombre, 'total': total_borrado, 'items': cant_items})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JsonResponse({'ok': False, 'error': str(e)})
+
+@login_required
+@csrf_exempt
 def api_aplicar_suba_categoria(request):
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'error': 'Metodo no permitido'})
