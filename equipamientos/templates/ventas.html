@@ -22,6 +22,10 @@ body{background:#0f0f0f;color:#e0e0e0;font-family:Inter,system-ui}.navbar{backgr
 .input-dark:focus{outline:none;border-color:#FFD600}
 .prod-row:hover{background:#222}
 .filter-pill{background:#1e1e1e;border:1px solid #2a2a2a;border-radius:20px;padding:6px 12px;color:#aaa;font-size:12px}
+.btn-ver{background:#FFD600;color:#000;border:none;border-radius:8px;padding:5px 10px;font-size:10px;font-weight:800;cursor:pointer}
+.codigo-venta{cursor:pointer;text-decoration:underline;text-decoration-color:#4ade80;text-underline-offset:3px}
+.detalle-row{border-bottom:1px solid #222;padding:10px 4px}
+.detalle-total-box{background:#FFD600;color:#000;border-radius:12px;padding:14px 16px;font-weight:900;font-size:20px}
 </style>
 </head><body>
 <nav class="navbar px-4 py-3 d-flex justify-content-between align-items-center">
@@ -77,13 +81,13 @@ body{background:#0f0f0f;color:#e0e0e0;font-family:Inter,system-ui}.navbar{backgr
       <tbody>
         {% for v in ventas %}
         <tr data-cliente="{{v.cliente.nombre|lower}} {{v.codigo|lower}}" data-pago="{{v.forma_pago}}" data-fecha="{{v.fecha_venta|date:'Y-m-d'}}">
-          <td><b style="font-family:monospace;color:#4ade80;font-size:11px">{{v.codigo}}</b></td>
+          <td><b onclick="verDetalleVenta({{v.id}})" class="codigo-venta" title="Ver detalle" style="font-family:monospace;color:#4ade80;font-size:11px">{{v.codigo}}</b></td>
           <td><b style="color:#fff;font-size:12px">{{v.cliente.nombre|truncatechars:22}}</b></td>
           <td style="font-size:11px">{{v.fecha_venta|date:"d/m/Y H:i"}}</td>
           <td><span class="badge-pago pago-efectivo">{{v.forma_pago}}</span>{% if v.descuento_porcentaje %}<span style="background:#4ade80;color:#000;border-radius:20px;padding:2px 6px;font-size:9px;margin-left:4px">-{{v.descuento_porcentaje}}%</span>{% endif %}</td>
           <td>{% if v.vendedor == 'HALCON' %}<span style="background:#FFD600;color:#000;border-radius:20px;padding:3px 8px;font-size:10px;font-weight:800">🦅 Halcon Equip.</span>{% elif v.vendedor == 'DIAZ' %}<span style="background:#60a5fa;color:#000;border-radius:20px;padding:3px 8px;font-size:10px;font-weight:800">🔧 Elect. Diaz</span>{% else %}<span style="color:#666;font-size:11px">—</span>{% endif %}</td>
           <td class="text-end"><b style="color:#fff">{{v.total|ars}}</b>{% if v.descuento_monto %}<br><small style="color:#888;text-decoration:line-through">{{v.total_original|ars}}</small>{% endif %}</td>
-          <td><button onclick="eliminarVenta({{v.id}}, '{{v.codigo}}', '{{v.total|ars}}')" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:10px;font-weight:800">🗑 Borrar</button></td>
+          <td><div class="d-flex gap-1"><button onclick="verDetalleVenta({{v.id}})" class="btn-ver">👁️ Ver</button><button onclick="eliminarVenta({{v.id}}, '{{v.codigo}}', '{{v.total|ars}}')" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:10px;font-weight:800">🗑 Borrar</button></div></td>
         </tr>
         {% empty %}<tr><td colspan="7" class="text-center py-5">No hay ventas</td></tr>{% endfor %}
       </tbody>
@@ -91,6 +95,62 @@ body{background:#0f0f0f;color:#e0e0e0;font-family:Inter,system-ui}.navbar{backgr
     </div>
   </div>
 </div>
+
+<!-- DATOS OCULTOS PARA EL DETALLE - no se ven en la pagina, solo los lee la ventanita -->
+{% for v in ventas %}
+<div id="datos-venta-{{v.id}}" style="display:none"
+  data-codigo="{{v.codigo}}"
+  data-cliente="{{v.cliente.nombre}}"
+  data-fecha="{{v.fecha_venta|date:'d/m/Y H:i'}}"
+  data-pago="{{v.forma_pago}}"
+  data-vendedor="{% if v.vendedor == 'HALCON' %}🦅 Halcon Equipamientos{% elif v.vendedor == 'DIAZ' %}🔧 Electromecánica Diaz{% else %}— Sin vendedor{% endif %}"
+  data-vehiculo="{{v.vehiculo|default:''}}"
+  data-subtotal="{{v.subtotal_productos|default:''}}"
+  data-descuento-pct="{{v.descuento_porcentaje|default:'0'}}"
+  data-descuento-monto="{{v.descuento_monto|default:'0'}}"
+  data-total-original="{{v.total_original|default:''}}"
+  data-colocacion="{{v.colocacion|default:'0'}}"
+  data-total="{{v.total}}">
+  {% for it in v.itemventa_set.all %}
+  <div class="item-detalle"
+    data-codigo="{% if it.producto %}{{it.producto.codigo}}{% else %}MANUAL{% endif %}"
+    data-nombre="{% if it.es_manual or not it.producto %}{{it.nombre_manual}}{% else %}{{it.producto.nombre}}{% endif %}"
+    data-cantidad="{{it.cantidad}}"
+    data-precio="{{it.precio}}"
+    data-manual="{% if it.es_manual %}1{% else %}0{% endif %}"></div>
+  {% endfor %}
+</div>
+{% endfor %}
+
+<!-- MODAL DETALLE DE VENTA -->
+<div id="modalDetalleVenta" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this) cerrarDetalleVenta()">
+  <div class="modal-dark" style="width:100%;max-width:640px;max-height:90vh;overflow:auto;padding:24px">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="mb-0" style="color:#FFD600">🧾 Detalle de Venta</h5>
+      <button onclick="cerrarDetalleVenta()" style="background:#222;color:#fff;border:none;border-radius:50%;width:32px;height:32px">✕</button>
+    </div>
+    <div style="background:#111;border-radius:12px;padding:14px 16px;margin-bottom:14px">
+      <div class="d-flex justify-content-between"><span id="det_codigo" style="font-family:monospace;color:#4ade80;font-weight:900"></span><span id="det_fecha" style="color:#888;font-size:12px"></span></div>
+      <div id="det_cliente" style="color:#fff;font-weight:800;font-size:18px;margin-top:6px"></div>
+      <div id="det_vehiculo" style="color:#888;font-size:12px"></div>
+      <div class="d-flex gap-2 mt-2 flex-wrap">
+        <span id="det_pago" style="background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.3);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700"></span>
+        <span id="det_vendedor" style="background:#FFD600;color:#000;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:800"></span>
+      </div>
+    </div>
+    <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Qué se vendió</div>
+    <div id="det_items" style="background:#111;border-radius:12px;padding:8px 14px;margin-bottom:14px"></div>
+    <div style="background:#111;border-radius:12px;padding:14px 16px;margin-bottom:14px">
+      <div class="d-flex justify-content-between py-1"><span style="color:#888;font-size:13px">Subtotal productos</span><b id="det_subtotal" style="color:#fff"></b></div>
+      <div id="det_descuento_row" class="d-flex justify-content-between py-1"><span id="det_descuento_label" style="color:#4ade80;font-size:13px">Descuento</span><b id="det_descuento" style="color:#4ade80"></b></div>
+      <div class="d-flex justify-content-between py-1"><span style="color:#888;font-size:13px">Colocación / Mano de obra</span><b id="det_colocacion" style="color:#fff"></b></div>
+      <div id="det_original_row" class="d-flex justify-content-between py-1"><span style="color:#888;font-size:12px">Total original (sin descuento)</span><span id="det_original" style="color:#888;text-decoration:line-through;font-size:13px"></span></div>
+    </div>
+    <div class="detalle-total-box d-flex justify-content-between align-items-center"><span style="font-size:13px;letter-spacing:1px">TOTAL FINAL</span><span id="det_total"></span></div>
+    <button onclick="cerrarDetalleVenta()" style="width:100%;background:#222;color:#fff;font-weight:800;border:1px solid #333;border-radius:12px;padding:12px;margin-top:14px">Cerrar</button>
+  </div>
+</div>
+
 <!-- MODAL VENTA DIRECTA - CON MANO DE OBRA + MANUAL + DESCUENTO + VENDEDOR -->
 <div id="modalVentaDirecta" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;padding:20px">
   <div class="modal-dark" style="width:100%;max-width:700px;max-height:90vh;overflow:auto;padding:24px">
@@ -167,6 +227,68 @@ body{background:#0f0f0f;color:#e0e0e0;font-family:Inter,system-ui}.navbar{backgr
   </div>
 </div>
 <script>
+function fmtARS(n){ n = parseFloat(n)||0; return '$ ' + n.toLocaleString('es-AR',{minimumFractionDigits:2}); }
+function verDetalleVenta(id){
+  let box = document.getElementById('datos-venta-'+id);
+  if(!box){ alert('No se encontró el detalle de esta venta'); return; }
+  let pct = parseFloat(box.dataset.descuentoPct)||0;
+  let montoDesc = parseFloat(box.dataset.descuentoMonto)||0;
+  let coloc = parseFloat(box.dataset.colocacion)||0;
+  let total = parseFloat(box.dataset.total)||0;
+  let subtotal = parseFloat(box.dataset.subtotal)||0;
+  let totalOrig = parseFloat(box.dataset.totalOriginal)||0;
+  let items = box.querySelectorAll('.item-detalle');
+  document.getElementById('det_codigo').textContent = box.dataset.codigo || '';
+  document.getElementById('det_cliente').textContent = box.dataset.cliente || '';
+  document.getElementById('det_fecha').textContent = box.dataset.fecha || '';
+  document.getElementById('det_pago').textContent = box.dataset.pago || '';
+  document.getElementById('det_vendedor').textContent = box.dataset.vendedor || '—';
+  let veh = (box.dataset.vehiculo||'').trim();
+  document.getElementById('det_vehiculo').textContent = veh ? ('Vehículo: ' + veh) : '';
+  // Items
+  let itemsBox = document.getElementById('det_items');
+  if(items.length===0){
+    itemsBox.innerHTML = '<div style="color:#888;font-size:13px;padding:10px 0">Esta venta no tiene productos guardados en el detalle (venta vieja). El total es el que figura abajo.</div>';
+  } else {
+    let html = '';
+    let sumaItems = 0;
+    items.forEach(function(el){
+      let cant = parseFloat(el.dataset.cantidad)||0;
+      let precio = parseFloat(el.dataset.precio)||0;
+      let sub = cant * precio;
+      sumaItems += sub;
+      let badge = el.dataset.manual==='1' ? '<span style="background:#FFD600;color:#000;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:800;margin-left:6px">MANUAL</span>' : '';
+      html += '<div class="detalle-row d-flex justify-content-between align-items-start"><div><b style="font-family:monospace;color:#FFD600;font-size:11px">' + el.dataset.codigo + '</b>' + badge + '<div style="color:#fff;font-size:13px">' + el.dataset.nombre + '</div><small style="color:#888">' + fmtARS(precio) + ' x ' + cant + '</small></div><b style="color:#fff;white-space:nowrap;margin-left:10px">' + fmtARS(sub) + '</b></div>';
+    });
+    itemsBox.innerHTML = html;
+    // Si la venta no tiene subtotal guardado (ventas viejas), lo sacamos de la suma de items
+    if(!subtotal || subtotal<=0) subtotal = sumaItems;
+  }
+  // Si hay descuento pero no monto, lo calculamos
+  if(pct>0 && (!montoDesc || montoDesc<=0)) montoDesc = subtotal * (pct/100);
+  if(!totalOrig || totalOrig<=0) totalOrig = subtotal + coloc;
+  document.getElementById('det_subtotal').textContent = fmtARS(subtotal);
+  let descRow = document.getElementById('det_descuento_row');
+  if(pct>0 || montoDesc>0){
+    descRow.style.display = 'flex';
+    document.getElementById('det_descuento_label').textContent = pct>0 ? ('Descuento ' + pct + '% (solo productos)') : 'Descuento';
+    document.getElementById('det_descuento').textContent = '- ' + fmtARS(montoDesc);
+  } else {
+    descRow.style.display = 'none';
+  }
+  document.getElementById('det_colocacion').textContent = fmtARS(coloc);
+  let origRow = document.getElementById('det_original_row');
+  if(pct>0 && totalOrig>total){
+    origRow.style.display = 'flex';
+    document.getElementById('det_original').textContent = fmtARS(totalOrig);
+  } else {
+    origRow.style.display = 'none';
+  }
+  document.getElementById('det_total').textContent = fmtARS(total);
+  document.getElementById('modalDetalleVenta').style.display = 'flex';
+}
+function cerrarDetalleVenta(){ document.getElementById('modalDetalleVenta').style.display='none'; }
+document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ cerrarDetalleVenta(); } });
 function descargarPDFMes(){
   let mes = document.getElementById('pdf_mes').value;
   if(!mes){ alert('Elegí el mes primero'); return; }
@@ -229,113 +351,4 @@ function buscarProdDirecta(q){
   });
 }
 function agregarProdDirecta(prod){
-  let ex=carritoDirecta.find(x=>x.id==prod.id && !x.es_manual);
-  if(ex){ ex.cantidad++; } else{ carritoDirecta.push({id:prod.id,codigo:prod.codigo,nombre:prod.nombre,precio:prod.precio,cantidad:1,es_manual:false}); }
-  document.getElementById('vd_resultados').style.display='none';
-  document.getElementById('vd_buscar').value='';
-  renderCarritoDirecta();
-}
-function agregarManualDirecta(){
-  let nombre = document.getElementById('vd_manual_nombre').value.trim();
-  let precio = parseFloat(document.getElementById('vd_manual_precio').value) || 0;
-  if(!nombre){ alert('Poné nombre del producto manual'); return; }
-  if(precio<=0){ alert('Poné precio válido'); return; }
-  let idManual = 'MANUAL-' + Date.now();
-  carritoDirecta.push({id:idManual,codigo:'MANUAL',nombre:nombre,precio:precio,cantidad:1,es_manual:true,nombre_manual:nombre});
-  document.getElementById('vd_manual_nombre').value='';
-  document.getElementById('vd_manual_precio').value='';
-  renderCarritoDirecta();
-}
-function renderCarritoDirecta(){
-  let box=document.getElementById('vd_carrito');
-  let subtotalProductos = 0;
-  let html = '';
-  if(carritoDirecta.length==0){
-    box.innerHTML='<small class="text-secondary">Carrito vacío</small>';
-  } else {
-    carritoDirecta.forEach((it, idx)=>{
-      let sub=it.precio*it.cantidad; subtotalProductos+=sub;
-      let badge = it.es_manual ? '<span style="background:#FFD600;color:#000;border-radius:10px;padding:2px 6px;font-size:9px;font-weight:800">MANUAL</span>' : '';
-      html+=`<div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid #222"><div>${badge} <b style="font-size:11px;font-family:monospace;color:#FFD600">${it.codigo}</b> <span style="font-size:12px">${it.nombre.substring(0,35)}</span><br><small style="color:#888">$${it.precio} x ${it.cantidad} = $${sub.toFixed(0)}</small></div><div class="d-flex gap-1"><button onclick="cambiarCantDirecta(${idx},-1)" style="width:26px;height:26px;border-radius:50%;background:#222;color:#fff;border:1px solid #333">-</button><span style="font-weight:700;margin:0 4px">${it.cantidad}</span><button onclick="cambiarCantDirecta(${idx},1)" style="width:26px;height:26px;border-radius:50%;background:#FFD600;color:#000;border:none;font-weight:800">+</button><button onclick="quitarDirecta(${idx})" style="background:transparent;color:#ef4444;border:none;margin-left:6px">✕</button></div></div>`;
-    });
-    box.innerHTML=html;
-  }
-  let coloc = parseFloat(document.getElementById('vd_colocacion').value) || 0;
-  let descPct = parseFloat(document.getElementById('vd_descuento').value) || 0;
-  if(descPct<0) descPct=0; if(descPct>100) descPct=100;
-  let descMonto = subtotalProductos * (descPct/100);
-  let subtotalConDesc = subtotalProductos - descMonto;
-  let totalOriginal = subtotalProductos + coloc;
-  totalDirecta = subtotalConDesc + coloc;
-  document.getElementById('vd_subtotal').innerText = '$ ' + subtotalProductos.toLocaleString('es-AR',{minimumFractionDigits:0});
-  document.getElementById('vd_descuento_info').innerText = descPct>0 ? `-${descPct}% = -$${descMonto.toLocaleString('es-AR',{minimumFractionDigits:0})}` : '';
-  document.getElementById('vd_total_original').innerText = '$ ' + totalOriginal.toLocaleString('es-AR',{minimumFractionDigits:2});
-  document.getElementById('vd_total').innerText = '$ ' + totalDirecta.toLocaleString('es-AR',{minimumFractionDigits:2}) + (descPct>0 ? ' (con descuento)' : '');
-  window._vd_calc = {subtotal_productos: subtotalProductos, descuento_porcentaje: descPct, descuento_monto: descMonto, total_original: totalOriginal, total_final: totalDirecta};
-}
-function cambiarCantDirecta(idx, delta){ carritoDirecta[idx].cantidad+=delta; if(carritoDirecta[idx].cantidad<=0) carritoDirecta.splice(idx,1); renderCarritoDirecta(); }
-function quitarDirecta(idx){ carritoDirecta.splice(idx,1); renderCarritoDirecta(); }
-function guardarVentaDirecta(){
-  let cliente=document.getElementById('vd_cliente').value.trim();
-  if(!cliente){ alert('Poné nombre del cliente'); return; }
-  if(carritoDirecta.length==0){ alert('Agregá al menos un producto'); return; }
-  let coloc = parseFloat(document.getElementById('vd_colocacion').value) || 0;
-  let calc = window._vd_calc || {subtotal_productos:0,descuento_porcentaje:0,descuento_monto:0,total_original:totalDirecta,total_final:totalDirecta};
-  let data={
-    cliente_nombre:cliente,
-    telefono:document.getElementById('vd_telefono').value.trim(),
-    vehiculo:document.getElementById('vd_vehiculo').value.trim(),
-    forma_pago:document.getElementById('vd_pago').value,
-    vendedor:document.getElementById('vd_vendedor').value,
-    colocacion: coloc,
-    subtotal_productos: calc.subtotal_productos,
-    descuento_porcentaje: calc.descuento_porcentaje,
-    descuento_monto: calc.descuento_monto,
-    total_original: calc.total_original,
-    total:calc.total_final,
-    items:carritoDirecta.map(i=>({id:i.id,codigo:i.codigo,nombre:i.nombre,cantidad:i.cantidad,precio:i.precio,es_manual:!!i.es_manual,nombre_manual:i.nombre_manual||i.nombre}))
-  };
-  if(!confirm('¿Confirmar venta por $'+calc.total_final.toLocaleString('es-AR')+' a '+cliente+'? (Productos $'+calc.subtotal_productos+' - '+calc.descuento_porcentaje+'% = $'+calc.descuento_monto+' + $'+coloc+' instalación)')) return;
-  fetch('/api/venta_directa/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r=>r.json()).then(d=>{ if(d.ok){ alert('✅ Venta '+d.codigo+' creada.'); location.reload(); } else alert('Error: '+d.error); });
-}
-document.getElementById('vd_barcode').addEventListener('keydown', function(e){
-  if(e.key==='Enter'){
-    e.preventDefault();
-    venderPorBarcode(this.value);
-  }
-});
-document.getElementById('vd_barcode').addEventListener('change', function(){
-  if(this.value.trim().length>2) venderPorBarcode(this.value);
-});
-function getCSRFToken(){
-  let m = document.cookie.match(/csrftoken=([^;]+)/);
-  if(m) return m[1];
-  let inp = document.querySelector('[name=csrfmiddlewaretoken]');
-  return inp ? inp.value : '';
-}
-function eliminarVenta(id, codigo, total){
-  if(!confirm(`¿Borrar venta ${codigo} por ${total}?
-✅ Se devuelve el stock (solo productos reales, manuales no)
-✅ Se borra el ingreso de caja
-✅ Se borra la venta
-¿Estás seguro?`)) return;
-  if(!confirm(`CONFIRMACIÓN FINAL: ¿Borrar DEFINITIVAMENTE ${codigo}?
-Esta acción no se puede deshacer.`)) return;
-  fetch('/api/eliminar_venta/', {
-    method:'POST',
-    headers:{'Content-Type':'application/json','X-CSRFToken': getCSRFToken()},
-    body: JSON.stringify({venta_id: id})
-  })
-  .then(r=>r.json())
-  .then(d=>{
-    if(d.ok){
-      alert(`✅ ${d.mensaje}`);
-      location.reload();
-    } else {
-      alert('❌ Error: '+(d.error||'No se pudo borrar'));
-    }
-  })
-  .catch(err=>alert('Error de red: '+err));
-}
-</script>
-</body></html>
+  let ex=carritoDirect
